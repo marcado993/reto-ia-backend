@@ -30,7 +30,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #__next {
   height: 100%; height: 100dvh; overflow: hidden;
-  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
   background: var(--bg);
   color: var(--navy);
   -webkit-font-smoothing: antialiased;
@@ -192,7 +192,7 @@ html, body, #__next {
 
 .chat-topbar-right { display: flex; align-items: center; gap: 6px; }
 .topbar-btn {
-  width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border);
+  width: 32px; height: 32px; border-radius: 4px; border: 1px solid var(--border);
   background: #fff; cursor: pointer; display: flex; align-items: center;
   justify-content: center; color: var(--muted); transition: all .14s;
 }
@@ -220,7 +220,7 @@ html, body, #__next {
 .how-row { display: flex; gap: 8px; width: 100%; margin-bottom: 20px; }
 .how-card {
   flex: 1; background: #fff;
-  border: 1px solid var(--border); border-radius: 10px;
+  border: 1px solid var(--border); border-radius: 6px;
   padding: 11px 10px; text-align: center;
 }
 .how-n {
@@ -233,7 +233,7 @@ html, body, #__next {
 
 .suggestions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; width: 100%; }
 .sugg-btn {
-  background: #fff; border: 1px solid var(--border); border-radius: 10px;
+  background: #fff; border: 1px solid var(--border); border-radius: 6px;
   padding: 10px 12px; font-size: 12.5px; color: var(--slate);
   cursor: pointer; text-align: left; font-family: inherit;
   transition: all .15s; line-height: 1.4;
@@ -400,14 +400,14 @@ html, body, #__next {
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip {
   display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 10px; border-radius: 99px;
+  padding: 4px 10px; border-radius: 4px;
   font-size: 12px; font-weight: 500; border: 1px solid;
 }
 .chip-sym  { background: #EFF6FF; color: #1e40af; border-color: #BFDBFE; }
 .chip-spec { background: #F0FDF4; color: #065f46; border-color: #A7F3D0; }
 
 /* Urgency pill */
-.urgency-pill { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 99px; font-size: 12.5px; font-weight: 700; border: 1.5px solid; }
+.urgency-pill { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 4px; font-size: 12.5px; font-weight: 700; border: 1.5px solid; }
 .u-baja  { background: #F0FDF4; color: #166534; border-color: #A7F3D0; }
 .u-media { background: #FFFBEB; color: #92400E; border-color: #FDE68A; }
 .u-alta  { background: #FEF2F2; color: #991B1B; border-color: #FECACA; animation: upulse 1.5s infinite; }
@@ -419,7 +419,7 @@ html, body, #__next {
 .copago-desc {
   margin-top: 8px; font-size: 12px; color: var(--slate);
   background: #F8FAFC; border: 1px solid var(--border);
-  border-radius: 8px; padding: 8px 10px; line-height: 1.6;
+  border-radius: 6px; padding: 8px 10px; line-height: 1.6;
 }
 
 /* Hospital cards in right panel */
@@ -440,12 +440,12 @@ html, body, #__next {
 .rp-h-dist  { font-size: 10.5px; color: var(--muted); }
 
 /* Map */
-.rp-map { height: 180px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+.rp-map { height: 180px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
 
 /* Alert */
 .urgency-alert {
   background: #FEF2F2; border: 1px solid #FECACA;
-  border-radius: 10px; padding: 11px 13px;
+  border-radius: 6px; padding: 11px 13px;
 }
 .ua-head { font-size: 13px; font-weight: 700; color: #b91c1c; display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
 .ua-body { font-size: 12px; color: #dc2626; }
@@ -457,22 +457,22 @@ html, body, #__next {
   display: flex; align-items: center; justify-content: center; padding: 16px;
 }
 .modal-box {
-  background: #fff; border-radius: 18px;
+  background: #fff; border-radius: 8px;
   width: 100%; max-width: 420px; max-height: 90dvh;
   display: flex; flex-direction: column; overflow: hidden;
   box-shadow: 0 24px 64px rgba(0,0,0,.16);
 }
 .modal-hd { padding: 16px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
-.modal-hd-ic { width: 32px; height: 32px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.modal-hd-ic { width: 32px; height: 32px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
 .modal-hd-title { font-size: 14px; font-weight: 700; color: var(--navy); flex: 1; }
-.modal-x { width: 26px; height: 26px; border: none; background: transparent; cursor: pointer; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: var(--muted); transition: all .12s; }
+.modal-x { width: 26px; height: 26px; border: none; background: transparent; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--muted); transition: all .12s; }
 .modal-x:hover { background: var(--bg); color: var(--navy); }
 .modal-body { padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
 .modal-lbl { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 7px; }
 .modal-ft { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 7px; }
-.btn-primary { background: var(--blue); color: #fff; border: none; border-radius: 9px; padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity .12s; }
+.btn-primary { background: var(--blue); color: #fff; border: none; border-radius: 4px; padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity .12s; }
 .btn-primary:hover { opacity: .9; }
-.btn-ghost { background: transparent; color: var(--slate); border: 1px solid var(--border); border-radius: 9px; padding: 8px 18px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; transition: background .12s; }
+.btn-ghost { background: transparent; color: var(--slate); border: 1px solid var(--border); border-radius: 4px; padding: 8px 18px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; transition: background .12s; }
 .btn-ghost:hover { background: var(--bg); }
 .btn-red { background: #dc2626 !important; }
 
