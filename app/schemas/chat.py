@@ -9,6 +9,8 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     session_id: str | None = None
     plan_id: int | None = None
+    age: int | None = Field(None, ge=0, le=120)
+    gender: str | None = Field(None, pattern="^(male|female)$")
 
 
 class HospitalRecommendation(BaseModel):
@@ -22,10 +24,16 @@ class HospitalRecommendation(BaseModel):
     distancia_km: float | None = None
 
 
+class CondicionProbable(BaseModel):
+    nombre: str
+    probabilidad: float = 0.0
+
+
 class StructuredResponse(BaseModel):
     sintomas: list[str] = Field(default_factory=list)
     urgencia: str = "media"
     especialidades_sugeridas: list[str] = Field(default_factory=list)
+    condiciones_probables: list[CondicionProbable] = Field(default_factory=list)
     plan_seguro: str = ""
     copago_estimado: float = 0.0
     moneda: str = "USD"

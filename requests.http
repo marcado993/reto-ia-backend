@@ -1,0 +1,77 @@
+### Health check
+GET http://localhost:8000/health
+
+### Listar planes de seguro disponibles (para saber qué plan_id usar)
+GET http://localhost:8000/api/health-plans/
+
+### Listar hospitales
+GET http://localhost:8000/api/hospitals/
+
+### ───────────────────────────────────────────────
+### CASO EMERGENCIA — dolor torácico irradiado
+### ───────────────────────────────────────────────
+POST http://localhost:8000/api/chat/
+Content-Type: application/json
+
+{
+  "message": "Me duele mucho el pecho desde hace una hora, me cuesta respirar y me duele el brazo izquierdo. Tengo sudor frio.",
+  "plan_id": 1,
+  "age": 58,
+  "gender": "male"
+}
+
+### ───────────────────────────────────────────────
+### CASO MEDIO — cefalea
+### ───────────────────────────────────────────────
+POST http://localhost:8000/api/chat/
+Content-Type: application/json
+
+{
+  "message": "Tengo dolor de cabeza intenso desde ayer, fotofobia y nauseas",
+  "plan_id": 1,
+  "age": 28,
+  "gender": "female"
+}
+
+### ───────────────────────────────────────────────
+### CASO BAJO — gripe
+### ───────────────────────────────────────────────
+POST http://localhost:8000/api/chat/
+Content-Type: application/json
+
+{
+  "message": "Tengo tos seca, fiebre de 38 y dolor de garganta hace 2 dias",
+  "plan_id": 2,
+  "age": 35,
+  "gender": "male"
+}
+
+### ───────────────────────────────────────────────
+### CASO ABDOMINAL
+### ───────────────────────────────────────────────
+POST http://localhost:8000/api/chat/
+Content-Type: application/json
+
+{
+  "message": "Me duele mucho el lado derecho del abdomen, tengo nauseas y vomito. Empezo cerca del ombligo y se movio.",
+  "plan_id": 1,
+  "age": 22,
+  "gender": "female"
+}
+
+### ───────────────────────────────────────────────
+### Continuar conversación (pega el session_id)
+### ───────────────────────────────────────────────
+POST http://localhost:8000/api/chat/
+Content-Type: application/json
+
+{
+  "message": "El dolor empeora cuando respiro profundo",
+  "session_id": "PEGA-AQUI-EL-UUID",
+  "plan_id": 1,
+  "age": 58,
+  "gender": "male"
+}
+
+### Recuperar el historial de una sesión
+GET http://localhost:8000/api/chat/sessions/PEGA-AQUI-EL-UUID
