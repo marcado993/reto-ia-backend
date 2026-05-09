@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+from datetime import datetime
+from uuid import UUID
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)
+    session_id: str | None = None
+    plan_id: int | None = None
+
+
+class HospitalRecommendation(BaseModel):
+    nombre: str
+    tipo: str = ""
+    red: str = ""
+    costo_consulta: float = 0.0
+    copago_paciente: float = 0.0
+    lat: float | None = None
+    lon: float | None = None
+    distancia_km: float | None = None
+
+
+class StructuredResponse(BaseModel):
+    sintomas: list[str] = Field(default_factory=list)
+    urgencia: str = "media"
+    especialidades_sugeridas: list[str] = Field(default_factory=list)
+    plan_seguro: str = ""
+    copago_estimado: float = 0.0
+    moneda: str = "USD"
+    hospital_recomendado: HospitalRecommendation | None = None
+    hospitales_comparacion: list[HospitalRecommendation] = Field(default_factory=list)
+    desglose_cobertura: str = ""
+
+
+class ChatResponse(BaseModel):
+    session_id: str
+    reply: str
+    structured: StructuredResponse | None = None
+    needs_more_info: bool = False
+    clarification_questions: list[str] = Field(default_factory=list)

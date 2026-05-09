@@ -1,0 +1,16 @@
+[
+  {"code": "CONSULTA_GENERAL", "description": "Consulta medica general", "service_type": "consulta", "specialty": "medicina_interna", "base_cost_usd": 35.0},
+  {"code": "CONSULTA_CARDIO", "description": "Consulta de cardiologia", "service_type": "consulta", "specialty": "cardiologia", "base_cost_usd": 50.0},
+  {"code": "CONSULTA_NEUMO", "description": "Consulta de neumologia", "service_type": "consulta", "specialty": "neumologia", "base_cost_usd": 45.0},
+  {"code": "CONSULTA_NEURO", "description": "Consulta de neurologia", "service_type": "consulta", "specialty": "neurologia", "base_cost_usd": 48.0},
+  {"code": "CONSULTA_GASTRO", "description": "Consulta de gastroenterologia", "service_type": "consulta", "specialty": "gastroenterologia", "base_cost_usd": 42.0},
+  {"code": "CONSULTA_ORTO", "description": "Consulta de ortopedia", "service_type": "consulta", "specialty": "ortopedia", "base_cost_usd": 40.0},
+  {"code": "CONSULTA_DERMATO", "description": "Consulta de dermatologia", "service_type": "consulta", "specialty": "dermatologia", "base_cost_usd": 38.0},
+  {"code": "CONSULTA_UROLO", "description": "Consulta de urologia", "service_type": "consulta", "specialty": "urologia", "base_cost_usd": 42.0},
+  {"code": "CONSULTA_PSQ", "description": "Consulta de psiquiatria", "service_type": "consulta", "specialty": "psiquiatria", "base_cost_usd": 45.0},
+  {"code": "EMERGENCIA_GENERAL", "description": "Atencion de emergencia general", "service_type": "emergencia", "specialty": "emergencias", "base_cost_usd": 80.0},
+  {"code": "EMERGENCIA_CARDIO", "description": "Emergencia cardiaca", "service_type": "emergencia", "specialty": "cardiologia", "base_cost_usd": 120.0},
+  {"code": "EMERGENCIA_NEURO", "description": "Emergencia neurologica", "service_type": "emergencia", "specialty": "neurologia", "base_cost_usd": 110.0},
+  {"code": "HOSP_GENERAL", "description": "Hospitalizacion general", "service_type": "hospitalizacion", "specialty": null, "base_cost_usd": 200.0},
+  {"code": "LAB_GENERAL", "description": "Examenes de laboratorio general", "service_type": "laboratorio", "specialty": null, "base_cost_usd": 25.0}
+]
