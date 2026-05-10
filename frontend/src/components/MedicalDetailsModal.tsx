@@ -96,11 +96,12 @@ export default function MedicalDetailsModal({ isOpen, data, onClose }: Props) {
 
               {data.especialidades_sugeridas.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Especialidades Sugeridas</h4>
+                  <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Especialidad sugerida</h4>
                   <div className="flex flex-wrap gap-2">
-                    {data.especialidades_sugeridas.map(spec => (
-                      <SpecialtyTag key={spec} name={spec} />
-                    ))}
+                    <SpecialtyTag
+                      key={data.especialidades_sugeridas[0]}
+                      name={data.especialidades_sugeridas[0]}
+                    />
                   </div>
                 </div>
               )}

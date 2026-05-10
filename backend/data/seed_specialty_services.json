@@ -1,0 +1,169 @@
+{
+  "_doc": "Catálogo de servicios típicos por especialidad. El multiplicador se aplica sobre el precio de 'consulta' del hospital para esa especialidad. Generado offline para mantener el JSON de hospitales manejable.",
+  "cardiologia": [
+    {"name": "consulta", "label": "Consulta cardiológica", "multiplier": 1.0},
+    {"name": "electrocardiograma", "label": "Electrocardiograma (ECG)", "multiplier": 1.6},
+    {"name": "ecocardiograma", "label": "Ecocardiograma", "multiplier": 4.4},
+    {"name": "prueba_esfuerzo", "label": "Prueba de esfuerzo", "multiplier": 2.6},
+    {"name": "holter_24h", "label": "Holter 24 horas", "multiplier": 5.6},
+    {"name": "cateterismo", "label": "Cateterismo cardíaco", "multiplier": 86.0},
+    {"name": "angioplastia", "label": "Angioplastia coronaria", "multiplier": 230.0}
+  ],
+  "neumologia": [
+    {"name": "consulta", "label": "Consulta neumológica", "multiplier": 1.0},
+    {"name": "espirometria", "label": "Espirometría", "multiplier": 1.8},
+    {"name": "rx_torax", "label": "Radiografía de tórax", "multiplier": 1.0},
+    {"name": "broncoscopia", "label": "Broncoscopía", "multiplier": 8.0},
+    {"name": "polisomnografia", "label": "Polisomnografía (estudio del sueño)", "multiplier": 12.0}
+  ],
+  "neurologia": [
+    {"name": "consulta", "label": "Consulta neurológica", "multiplier": 1.0},
+    {"name": "electroencefalograma", "label": "Electroencefalograma (EEG)", "multiplier": 2.5},
+    {"name": "tomografia_cerebral", "label": "Tomografía cerebral (TAC)", "multiplier": 6.0},
+    {"name": "resonancia_magnetica", "label": "Resonancia magnética cerebral", "multiplier": 9.0},
+    {"name": "estudio_sueno", "label": "Estudio del sueño", "multiplier": 8.0}
+  ],
+  "medicina_interna": [
+    {"name": "consulta", "label": "Consulta de medicina interna", "multiplier": 1.0},
+    {"name": "chequeo_completo", "label": "Chequeo médico completo", "multiplier": 3.0}
+  ],
+  "medicina_general": [
+    {"name": "consulta", "label": "Consulta general", "multiplier": 1.0},
+    {"name": "chequeo_preventivo", "label": "Chequeo preventivo", "multiplier": 2.0}
+  ],
+  "gastroenterologia": [
+    {"name": "consulta", "label": "Consulta gastroenterológica", "multiplier": 1.0},
+    {"name": "endoscopia_alta", "label": "Endoscopía digestiva alta", "multiplier": 5.0},
+    {"name": "colonoscopia", "label": "Colonoscopía", "multiplier": 7.0},
+    {"name": "manometria", "label": "Manometría esofágica", "multiplier": 6.0},
+    {"name": "biopsia_intestinal", "label": "Biopsia intestinal", "multiplier": 10.0}
+  ],
+  "infectologia": [
+    {"name": "consulta", "label": "Consulta infectología", "multiplier": 1.0},
+    {"name": "panel_infeccioso", "label": "Panel infeccioso (laboratorio)", "multiplier": 2.5}
+  ],
+  "cirugia_general": [
+    {"name": "consulta", "label": "Consulta cirugía general", "multiplier": 1.0},
+    {"name": "hernioplastia", "label": "Hernioplastia", "multiplier": 6.0},
+    {"name": "apendicectomia", "label": "Apendicectomía", "multiplier": 8.0},
+    {"name": "colecistectomia", "label": "Colecistectomía (vesícula)", "multiplier": 15.0}
+  ],
+  "ortopedia": [
+    {"name": "consulta", "label": "Consulta ortopédica", "multiplier": 1.0},
+    {"name": "radiografia", "label": "Radiografía", "multiplier": 1.0},
+    {"name": "infiltracion", "label": "Infiltración articular", "multiplier": 3.0},
+    {"name": "yeso_simple", "label": "Inmovilización con yeso", "multiplier": 2.0},
+    {"name": "artroscopia", "label": "Artroscopía", "multiplier": 70.0},
+    {"name": "reemplazo_cadera", "label": "Reemplazo de cadera", "multiplier": 350.0}
+  ],
+  "traumatologia": [
+    {"name": "consulta", "label": "Consulta traumatología", "multiplier": 1.0},
+    {"name": "radiografia", "label": "Radiografía", "multiplier": 1.2},
+    {"name": "yeso", "label": "Yeso/inmovilización", "multiplier": 2.5}
+  ],
+  "dermatologia": [
+    {"name": "consulta", "label": "Consulta dermatológica", "multiplier": 1.0},
+    {"name": "crioterapia", "label": "Crioterapia (lesiones)", "multiplier": 2.0},
+    {"name": "biopsia_piel", "label": "Biopsia de piel", "multiplier": 3.0},
+    {"name": "cirugia_lesiones", "label": "Cirugía menor de piel", "multiplier": 8.0}
+  ],
+  "emergencias": [
+    {"name": "atencion_emergencia", "label": "Atención de emergencia", "multiplier": 1.0},
+    {"name": "estabilizacion", "label": "Estabilización", "multiplier": 1.5},
+    {"name": "trauma_menor", "label": "Trauma menor", "multiplier": 2.0},
+    {"name": "trauma_mayor", "label": "Trauma mayor / politrauma", "multiplier": 8.0}
+  ],
+  "urologia": [
+    {"name": "consulta", "label": "Consulta urológica", "multiplier": 1.0},
+    {"name": "uroflujometria", "label": "Uroflujometría", "multiplier": 2.0},
+    {"name": "cistoscopia", "label": "Cistoscopía", "multiplier": 6.0},
+    {"name": "biopsia_prostatica", "label": "Biopsia prostática", "multiplier": 8.0},
+    {"name": "litotripsia", "label": "Litotripsia (cálculos)", "multiplier": 50.0}
+  ],
+  "otorrinolaringologia": [
+    {"name": "consulta", "label": "Consulta ORL", "multiplier": 1.0},
+    {"name": "audiometria", "label": "Audiometría", "multiplier": 1.5},
+    {"name": "endoscopia_nasal", "label": "Endoscopía nasal", "multiplier": 3.5},
+    {"name": "amigdalectomia", "label": "Amigdalectomía", "multiplier": 25.0}
+  ],
+  "reumatologia": [
+    {"name": "consulta", "label": "Consulta reumatológica", "multiplier": 1.0},
+    {"name": "factor_reumatoide", "label": "Factor reumatoide (laboratorio)", "multiplier": 1.5},
+    {"name": "infiltracion_articular", "label": "Infiltración articular", "multiplier": 3.0}
+  ],
+  "psiquiatria": [
+    {"name": "consulta", "label": "Consulta psiquiátrica", "multiplier": 1.0},
+    {"name": "psicoterapia", "label": "Sesión de psicoterapia", "multiplier": 1.5}
+  ],
+  "psicologia": [
+    {"name": "consulta", "label": "Consulta psicológica", "multiplier": 1.0},
+    {"name": "terapia_individual", "label": "Terapia individual", "multiplier": 1.0}
+  ],
+  "endocrinologia": [
+    {"name": "consulta", "label": "Consulta endocrinológica", "multiplier": 1.0},
+    {"name": "perfil_tiroideo", "label": "Perfil tiroideo (TSH, T3, T4)", "multiplier": 2.0},
+    {"name": "perfil_diabetes", "label": "Perfil diabetes (HbA1c, glucosa)", "multiplier": 1.8}
+  ],
+  "hematologia": [
+    {"name": "consulta", "label": "Consulta hematológica", "multiplier": 1.0},
+    {"name": "biometria_hematica", "label": "Biometría hemática", "multiplier": 0.8},
+    {"name": "biopsia_medula", "label": "Biopsia de médula ósea", "multiplier": 10.0}
+  ],
+  "oftalmologia": [
+    {"name": "consulta", "label": "Consulta oftalmológica", "multiplier": 1.0},
+    {"name": "tonometria", "label": "Tonometría", "multiplier": 1.0},
+    {"name": "fondo_ojo", "label": "Examen de fondo de ojo", "multiplier": 1.2},
+    {"name": "cirugia_catarata", "label": "Cirugía de catarata", "multiplier": 35.0}
+  ],
+  "odontologia": [
+    {"name": "consulta", "label": "Consulta odontológica", "multiplier": 1.0},
+    {"name": "limpieza", "label": "Profilaxis (limpieza dental)", "multiplier": 1.5},
+    {"name": "extraccion", "label": "Extracción simple", "multiplier": 2.5},
+    {"name": "endodoncia", "label": "Endodoncia (tratamiento de conducto)", "multiplier": 6.0}
+  ],
+  "ginecologia": [
+    {"name": "consulta", "label": "Consulta ginecológica", "multiplier": 1.0},
+    {"name": "papanicolaou", "label": "Papanicolaou", "multiplier": 1.5},
+    {"name": "ecografia_pelvica", "label": "Ecografía pélvica", "multiplier": 2.5},
+    {"name": "colposcopia", "label": "Colposcopía", "multiplier": 3.5},
+    {"name": "histeroscopia", "label": "Histeroscopía", "multiplier": 30.0},
+    {"name": "cesarea", "label": "Cesárea", "multiplier": 80.0}
+  ],
+  "cirugia_vascular": [
+    {"name": "consulta", "label": "Consulta cirugía vascular", "multiplier": 1.0},
+    {"name": "ecodoppler", "label": "Eco-Doppler vascular", "multiplier": 3.0},
+    {"name": "varices_escleroterapia", "label": "Escleroterapia de várices", "multiplier": 5.0},
+    {"name": "bypass_vascular", "label": "Bypass vascular", "multiplier": 200.0}
+  ],
+  "alergologia": [
+    {"name": "consulta", "label": "Consulta alergológica", "multiplier": 1.0},
+    {"name": "test_alergeno", "label": "Test cutáneo de alérgenos", "multiplier": 2.5},
+    {"name": "inmunoterapia", "label": "Inmunoterapia (vacuna alergia)", "multiplier": 4.0}
+  ],
+  "hepatologia": [
+    {"name": "consulta", "label": "Consulta hepatología", "multiplier": 1.0},
+    {"name": "fibroscan", "label": "FibroScan", "multiplier": 5.0},
+    {"name": "biopsia_hepatica", "label": "Biopsia hepática", "multiplier": 12.0}
+  ],
+  "oncologia": [
+    {"name": "consulta", "label": "Consulta oncológica", "multiplier": 1.0},
+    {"name": "biopsia", "label": "Biopsia diagnóstica", "multiplier": 5.0},
+    {"name": "quimioterapia_sesion", "label": "Sesión de quimioterapia", "multiplier": 30.0},
+    {"name": "radioterapia_sesion", "label": "Sesión de radioterapia", "multiplier": 25.0}
+  ],
+  "nutricion": [
+    {"name": "consulta", "label": "Consulta nutricional", "multiplier": 1.0},
+    {"name": "evaluacion_corporal", "label": "Evaluación de composición corporal", "multiplier": 1.5},
+    {"name": "plan_alimenticio", "label": "Plan alimenticio personalizado", "multiplier": 1.2}
+  ],
+  "geriatria": [
+    {"name": "consulta", "label": "Consulta geriátrica", "multiplier": 1.0},
+    {"name": "valoracion_integral", "label": "Valoración geriátrica integral", "multiplier": 2.0}
+  ],
+  "pediatria": [
+    {"name": "consulta", "label": "Consulta pediátrica", "multiplier": 1.0},
+    {"name": "control_nino_sano", "label": "Control de niño sano", "multiplier": 0.9},
+    {"name": "vacunacion", "label": "Vacunación", "multiplier": 1.2},
+    {"name": "test_alergias", "label": "Test de alergias pediátrico", "multiplier": 4.0}
+  ]
+}

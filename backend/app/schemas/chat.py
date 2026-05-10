@@ -29,12 +29,20 @@ class CondicionProbable(BaseModel):
     probabilidad: float = 0.0
 
 
+class ServicioRecomendado(BaseModel):
+    nombre: str = ""
+    label: str = ""
+    razon: str = ""
+
+
 class StructuredResponse(BaseModel):
     sintomas: list[str] = Field(default_factory=list)
     urgencia: str = "media"
     especialidades_sugeridas: list[str] = Field(default_factory=list)
     condiciones_probables: list[CondicionProbable] = Field(default_factory=list)
+    servicio_recomendado: ServicioRecomendado | None = None
     plan_seguro: str = ""
+    costo_base: float = 0.0
     copago_estimado: float = 0.0
     moneda: str = "USD"
     hospital_recomendado: HospitalRecommendation | None = None

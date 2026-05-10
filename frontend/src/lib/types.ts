@@ -16,11 +16,25 @@ export interface AgentStep {
   detail?: string
 }
 
+export interface CondicionProbable {
+  nombre: string
+  probabilidad: number
+}
+
+export interface ServicioRecomendado {
+  nombre: string
+  label: string
+  razon: string
+}
+
 export interface StructuredResponse {
   sintomas: string[]
   urgencia: 'baja' | 'media' | 'alta'
   especialidades_sugeridas: string[]
+  condiciones_probables: CondicionProbable[]
+  servicio_recomendado: ServicioRecomendado | null
   plan_seguro: string
+  costo_base: number
   copago_estimado: number
   moneda: string
   hospital_recomendado: HospitalRecommendation | null
@@ -37,6 +51,18 @@ export interface HospitalRecommendation {
   lat: number | null
   lon: number | null
   distancia_km: number | null
+}
+
+export interface NetworkProvider {
+  nombre: string
+  categoria: string | null
+  ciudad: string | null
+  provincia: string | null
+  direccion: string | null
+  horarios: string | null
+  lat: number | null
+  lon: number | null
+  aseguradora: string | null
 }
 
 export interface SymptomBadge {

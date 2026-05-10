@@ -21,6 +21,7 @@ class HospitalService:
         user_lat: float | None = None,
         user_lon: float | None = None,
         limit: int = 3,
+        service_name: str | None = None,
     ) -> list[HospitalRecommendation]:
         plan = self.db.query(HealthPlan).filter(HealthPlan.id == plan_id).first()
         if not plan:
@@ -32,13 +33,27 @@ class HospitalService:
         if not hospitals:
             hospitals = self.db.query(Hospital).all()
 
-        hospital_costs = []
+        # Si pedimos un servicio específico, priorizamos hospitales que lo tengan
+        if service_name and specialty:
+            with_service = [
+                h for h in hospitals
+                if any(s["name"] == service_name for s in h.list_services(specialty))
+            ]
+            if with_service:
+                hospitals = with_service
+
+        recs: list[HospitalRecommendation] = []
         for h in hospitals:
-            cost = h.get_cost(specialty) if specialty else h.get_cost("medicina_general")
+            cost = (
+                h.get_service_price(specialty, service_name)
+                if specialty
+                else h.get_service_price("medicina_general")
+            )
             if cost is None:
                 cost = 0.0 if h.is_public else 40.0
 
-            copago = self._calculate_copago(plan, h, specialty)
+            copago = self._calculate_copago(plan, h, specialty, service_name, urgency)
+            service_type = "emergencia" if urgency == "alta" else "consulta"
 
             distance = None
             if user_lat is not None and user_lon is not None and h.lat and h.lon:
@@ -46,7 +61,7 @@ class HospitalService:
                     user_lat, user_lon, float(h.lat), float(h.lon)
                 )
 
-            hospital_costs.append(
+            recs.append(
                 HospitalRecommendation(
                     nombre=h.name,
                     tipo=h.type or "general",
@@ -60,21 +75,33 @@ class HospitalService:
             )
 
         if urgency == "alta":
-            public = [h for h in hospital_costs if h.tipo in ("public", "iess", "issfa")]
-            other = [h for h in hospital_costs if h.tipo not in ("public", "iess", "issfa")]
-            hospital_costs = public + other
+            public = [h for h in recs if h.tipo in ("public", "iess", "issfa")]
+            other = [h for h in recs if h.tipo not in ("public", "iess", "issfa")]
+            recs = public + other
 
-        hospital_costs.sort(key=lambda h: (h.copago_paciente, h.distancia_km or 9999))
+        recs.sort(key=lambda h: (h.copago_paciente, h.distancia_km or 9999))
 
-        return hospital_costs[:limit]
+        return recs[:limit]
 
-    def _calculate_copago(self, plan: HealthPlan, hospital: Hospital, specialty: str | None) -> float:
+    def _calculate_copago(
+        self,
+        plan: HealthPlan,
+        hospital: Hospital,
+        specialty: str | None,
+        service_name: str | None,
+        urgency: str,
+    ) -> float:
         if plan.is_public:
             return 0.0
-        cost = hospital.get_cost(specialty) if specialty else hospital.get_cost("medicina_general")
+        cost = (
+            hospital.get_service_price(specialty, service_name)
+            if specialty
+            else hospital.get_service_price("medicina_general")
+        )
         if cost is None:
             cost = 40.0
-        return float(plan.copago_for_service("consulta", cost))
+        service_type = "emergencia" if urgency == "alta" else "consulta"
+        return float(plan.copago_for_service(service_type, cost))
 
     @staticmethod
     def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

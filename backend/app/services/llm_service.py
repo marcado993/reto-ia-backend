@@ -1,7 +1,7 @@
-"""Servicio LLM basado en Google Gemini (google-genai SDK).
+"""Servicio LLM: OpenRouter (API OpenAI-compatible) con fallback opcional a Gemini.
 
-Si `GEMINI_API_KEY` no está configurada, el servicio funciona en modo offline
-(devuelve listas/strings vacías) sin romper el agente.
+Si no hay `OPENROUTER_API_KEY` ni `GEMINI_API_KEY` válidas, el servicio opera en
+modo offline (respuestas vacías) sin romper el agente.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import re
 from app.agent.prompts import (
     EXTRACTION_PROMPT,
     FEATURE_MAPPING_PROMPT,
+    SERVICE_PICK_PROMPT,
     SUMMARY_PROMPT,
 )
 from app.config import settings
@@ -23,36 +24,105 @@ logger = logging.getLogger(__name__)
 
 class LLMService:
     def __init__(self) -> None:
-        self._available = bool(
-            settings.GEMINI_API_KEY
-            and not settings.GEMINI_API_KEY.startswith("AIza-your")
-        )
-        self.client = None
-        self.model = settings.GEMINI_MODEL
-        if self._available:
-            try:
-                from google import genai
+        self._backend: str | None = None
+        self._openai = None
+        self._gemini_client = None
+        self.model = ""
+        self._available = False
 
-                self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
-                logger.info("LLM Service initialized with Gemini (%s)", self.model)
+        or_key = (settings.OPENROUTER_API_KEY or "").strip()
+        if or_key and not or_key.startswith(("sk-or-your", "changeme")):
+            try:
+                from openai import AsyncOpenAI
+
+                ref = (settings.OPENROUTER_HTTP_REFERER or "").strip()
+                headers_fixed: dict[str, str] = {"X-Title": settings.APP_NAME}
+                if ref:
+                    headers_fixed["HTTP-Referer"] = ref
+                self._openai = AsyncOpenAI(
+                    base_url=settings.OPENROUTER_BASE_URL.rstrip("/"),
+                    api_key=or_key,
+                    default_headers=headers_fixed,
+                    timeout=settings.OPENROUTER_TIMEOUT,
+                    max_retries=1,
+                )
+                self.model = settings.OPENROUTER_MODEL
+                self._backend = "openrouter"
+                self._available = True
+                logger.info("LLM Service: OpenRouter, modelo %s", self.model)
             except Exception as e:
-                logger.warning("Could not initialize Gemini client: %s", e)
-                self._available = False
+                logger.warning("No se pudo inicializar OpenRouter: %s", e)
+
         if not self._available:
-            logger.info("LLM Service running in offline mode (no Gemini key)")
+            gem_ok = bool(
+                settings.GEMINI_API_KEY
+                and not settings.GEMINI_API_KEY.startswith("AIza-your")
+            )
+            if gem_ok:
+                try:
+                    from google import genai
+
+                    self._gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+                    self.model = settings.GEMINI_MODEL
+                    self._backend = "gemini"
+                    self._available = True
+                    logger.info("LLM Service: Gemini directo (%s)", self.model)
+                except Exception as e:
+                    logger.warning("No se pudo inicializar Gemini: %s", e)
+
+        if not self._available:
+            logger.info("LLM Service en modo offline (sin API key de LLM)")
 
     # ── Helpers ────────────────────────────────────────────────────
     @staticmethod
     def _strip_json_fence(text: str) -> str:
-        """Quita ```json ... ``` que Gemini suele devolver."""
         text = text.strip()
         if text.startswith("```"):
             text = re.sub(r"^```(?:json)?\s*", "", text)
             text = re.sub(r"\s*```$", "", text)
         return text.strip()
 
-    async def _generate(self, system: str, user: str, json_mode: bool = False) -> str:
-        if not self._available or not self.client:
+    async def _generate_openrouter(
+        self, system: str, user: str, json_mode: bool = False
+    ) -> str:
+        if not self._openai:
+            return ""
+        try:
+            kwargs: dict = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                "max_tokens": settings.OPENROUTER_MAX_TOKENS,
+                "temperature": settings.OPENROUTER_TEMPERATURE,
+            }
+            if json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
+            try:
+                resp = await self._openai.chat.completions.create(**kwargs)
+            except Exception as e1:
+                if json_mode:
+                    logger.debug(
+                        "OpenRouter json_object falló (%s), reintentando sin response_format",
+                        e1,
+                    )
+                    kwargs.pop("response_format", None)
+                    resp = await self._openai.chat.completions.create(**kwargs)
+                else:
+                    raise
+            text = (resp.choices[0].message.content or "").strip()
+            if not text:
+                logger.warning("OpenRouter devolvió texto vacío")
+            return text
+        except Exception as e:
+            logger.error("OpenRouter falló: %s", e)
+            return ""
+
+    async def _generate_gemini(
+        self, system: str, user: str, json_mode: bool = False
+    ) -> str:
+        if not self._gemini_client:
             return ""
         try:
             from google.genai import types
@@ -61,14 +131,12 @@ class LLMService:
                 "system_instruction": system,
                 "temperature": settings.GEMINI_TEMPERATURE,
                 "max_output_tokens": settings.GEMINI_MAX_TOKENS,
-                # Apaga "thinking" en gemini-2.5-flash: si no, los tokens internos
-                # de razonamiento se comen los de output y la respuesta sale truncada.
                 "thinking_config": types.ThinkingConfig(thinking_budget=0),
             }
             if json_mode:
                 cfg_kwargs["response_mime_type"] = "application/json"
 
-            response = await self.client.aio.models.generate_content(
+            response = await self._gemini_client.aio.models.generate_content(
                 model=self.model,
                 contents=user,
                 config=types.GenerateContentConfig(**cfg_kwargs),
@@ -76,16 +144,24 @@ class LLMService:
             text = (response.text or "").strip()
             if not text:
                 logger.warning(
-                    "Gemini devolvió texto vacío. finish_reason=%s, usage=%s",
+                    "Gemini devolvió texto vacío. finish_reason=%s",
                     getattr(response.candidates[0], "finish_reason", "?")
                     if response.candidates
                     else "?",
-                    getattr(response, "usage_metadata", "?"),
                 )
             return text
         except Exception as e:
-            logger.error("Gemini call failed: %s", e)
+            logger.error("Gemini falló: %s", e)
             return ""
+
+    async def _generate(self, system: str, user: str, json_mode: bool = False) -> str:
+        if not self._available:
+            return ""
+        if self._backend == "openrouter":
+            return await self._generate_openrouter(system, user, json_mode=json_mode)
+        if self._backend == "gemini":
+            return await self._generate_gemini(system, user, json_mode=json_mode)
+        return ""
 
     # ── API pública ────────────────────────────────────────────────
     async def extract_symptoms_from_text(self, text: str) -> list[SymptomExtraction]:
@@ -97,7 +173,7 @@ class LLMService:
         try:
             parsed = json.loads(self._strip_json_fence(raw))
         except json.JSONDecodeError:
-            logger.warning("Gemini devolvió JSON inválido: %r", raw[:200])
+            logger.warning("LLM devolvió JSON inválido (extracción): %r", raw[:200])
             return []
 
         symptoms_data = (
@@ -125,10 +201,8 @@ class LLMService:
         user: str,
         json_mode: bool = False,
     ) -> str:
-        """Chat genérico (single-turn). Para multi-turn usaremos client.aio.chats."""
         return await self._generate(system, user, json_mode=json_mode)
 
-    # ── Feature mapping (texto libre → features de EndlessMedical) ──
     async def map_text_to_features(
         self,
         patient_text: str,
@@ -136,11 +210,6 @@ class LLMService:
         age: int | None = None,
         gender: str | None = None,
     ) -> dict[str, str | int | float]:
-        """Pide a Gemini que traduzca el relato del paciente a un dict de features.
-
-        Devuelve SOLO features cuyo nombre exista en `valid_features` (defensa
-        contra alucinaciones del LLM).
-        """
         if not self._available:
             return {}
 
@@ -159,7 +228,7 @@ class LLMService:
         try:
             parsed = json.loads(self._strip_json_fence(raw))
         except json.JSONDecodeError:
-            logger.warning("Gemini devolvió JSON inválido en map_features: %r", raw[:200])
+            logger.warning("LLM devolvió JSON inválido (features): %r", raw[:200])
             return {}
 
         features = parsed.get("features", parsed)
@@ -173,13 +242,46 @@ class LLMService:
                 cleaned[name] = value
         return cleaned
 
-    # ── Summary humano del diagnóstico ──────────────────────────────
     async def summarize_diagnosis(self, context: dict) -> str:
-        """Recibe un dict con todo el contexto y devuelve la respuesta final
-        redactada por Gemini. Si no está disponible, devuelve "" para que el
-        agente caiga en su redacción por templates.
-        """
         if not self._available:
             return ""
         user_payload = json.dumps(context, ensure_ascii=False, indent=2)
         return await self._generate(SUMMARY_PROMPT, user_payload, json_mode=False)
+
+    async def pick_service(
+        self,
+        specialty: str,
+        urgency: str,
+        symptoms: list[str],
+        conditions: list[dict],
+        catalog: list[dict],
+    ) -> dict:
+        if not self._available or not catalog:
+            return {}
+
+        catalog_str = "\n".join(
+            f"- {s['name']}: {s.get('label', s['name'])} (precio base ${s.get('base_price', 0):.2f})"
+            for s in catalog
+        )
+        valid_names = {s["name"] for s in catalog}
+        user_payload = (
+            f"especialidad: {specialty}\n"
+            f"urgencia: {urgency}\n"
+            f"sintomas: {', '.join(symptoms) if symptoms else '(ninguno)'}\n"
+            f"condiciones_probables: "
+            f"{', '.join(c.get('nombre','') for c in conditions) if conditions else '(ninguna)'}\n\n"
+            f"catalogo de servicios disponibles:\n{catalog_str}\n"
+        )
+        raw = await self._generate(SERVICE_PICK_PROMPT, user_payload, json_mode=True)
+        if not raw:
+            return {}
+        try:
+            parsed = json.loads(self._strip_json_fence(raw))
+        except json.JSONDecodeError:
+            logger.warning("LLM devolvió JSON inválido (pick_service): %r", raw[:200])
+            return {}
+        service = parsed.get("service")
+        if service not in valid_names:
+            logger.warning("LLM eligió servicio fuera del catálogo: %r", service)
+            return {}
+        return {"service": service, "razon": parsed.get("razon", "")}

@@ -12,12 +12,14 @@ from app.schemas.chat import (
     ChatResponse,
     CondicionProbable,
     HospitalRecommendation,
+    ServicioRecomendado,
     StructuredResponse,
 )
+from app.models.hospital import Hospital
 from app.schemas.symptom import SymptomExtraction
 from app.schemas.specialty import SpecialtySuggestion
 from app.schemas.copago import CopagoResult
-from app.services.nlp_service import NLPService
+from app.services.nlp_service import NLPService, strip_accents
 from app.services.ontology_service import OntologyService
 from app.services.rule_engine import RuleEngine
 from app.services.copago_service import CopagoService
@@ -51,6 +53,7 @@ class MedicalAgent:
         copago_result: CopagoResult | None = None
         hospital_results: list[HospitalRecommendation] = []
         condiciones_probables: list[CondicionProbable] = []
+        servicio: ServicioRecomendado | None = None
 
         # Step 1: Extract symptoms using NLP (always works offline)
         raw_symptoms = self.nlp.extract_symptoms(request.message)
@@ -72,16 +75,59 @@ class MedicalAgent:
         if symptom_names:
             specialties = self.ontology.query_specialties(symptom_names)
 
+        # Step 2.5: Red-flag detector sobre el texto CRUDO (defensa contra
+        # un NLP que falle en extraer dolor torácico irradiado, sudoración, etc.)
+        red_flag = self._detect_cardiac_red_flags(request.message, symptom_names)
+        if red_flag:
+            for forced in red_flag.get("force_symptoms", []):
+                if forced not in symptom_names:
+                    symptom_names.append(forced)
+                    raw_symptoms.append(SymptomExtraction(
+                        raw_text=request.message,
+                        normalized=forced,
+                        severity="alta",
+                        confidence=0.9,
+                    ))
+            # Re-correr ontología con los síntomas reforzados
+            specialties = self.ontology.query_specialties(symptom_names)
+
         # Step 3: Evaluate rules for urgency
         if symptom_names:
             rule_result = self.rules.evaluate(symptom_names, request.message)
             urgency = rule_result.get("urgency", "media")
             alert = rule_result.get("alert")
-            if not specialties and rule_result.get("specialties"):
-                specialties = [
-                    SpecialtySuggestion(name=s, confidence=0.9, matching_symptoms=[])
-                    for s in rule_result["specialties"]
-                ]
+            rule_specs = rule_result.get("specialties", [])
+            if rule_specs:
+                if urgency == "alta":
+                    # En emergencia, las especialidades de la regla mandan
+                    existing_names = {s.name for s in specialties}
+                    boosted = [
+                        SpecialtySuggestion(name=s, confidence=0.95, matching_symptoms=[])
+                        for s in rule_specs if s not in existing_names
+                    ]
+                    in_rule = [s for s in specialties if s.name in rule_specs]
+                    rest = [s for s in specialties if s.name not in rule_specs]
+                    specialties = boosted + in_rule + rest
+                elif not specialties:
+                    specialties = [
+                        SpecialtySuggestion(name=s, confidence=0.9, matching_symptoms=[])
+                        for s in rule_specs
+                    ]
+
+        # Si el red-flag detector dictaminó IAM probable, su urgencia/alerta
+        # tiene prioridad sobre cualquier regla que haya quedado en estado más bajo
+        if red_flag:
+            urgency = "alta"
+            alert = red_flag.get("alert", alert)
+            forced_specs = red_flag.get("specialties", [])
+            existing_names = {s.name for s in specialties}
+            boosted = [
+                SpecialtySuggestion(name=s, confidence=0.97, matching_symptoms=[])
+                for s in forced_specs if s not in existing_names
+            ]
+            in_rule = [s for s in specialties if s.name in forced_specs]
+            rest = [s for s in specialties if s.name not in forced_specs]
+            specialties = boosted + in_rule + rest
 
         # Step 3b: EndlessMedical → enfermedades probables (Gemini hace de traductor)
         if symptom_names and self.llm._available:
@@ -89,30 +135,46 @@ class MedicalAgent:
                 request.message, request.age, request.gender
             )
 
-        # Step 4: Calculate copago and find hospital
+        # Step 4: Pick the specific service within the specialty
         plan_id = request.plan_id or (session.plan_id if session.plan_id else None)
         primary_specialty = specialties[0].name if specialties else None
+        service_name: str | None = None
 
+        if primary_specialty:
+            servicio = await self._pick_service(
+                primary_specialty, urgency, symptom_names, condiciones_probables
+            )
+            service_name = servicio.nombre if servicio else None
+
+        # Step 5: Calculate copago and find hospital with the chosen service
         if plan_id and primary_specialty:
             try:
                 service_type = "emergencia" if urgency == "alta" else "consulta"
-                copago_result = self.copago.calculate(plan_id, service_type, primary_specialty)
+                copago_result = self.copago.calculate(
+                    plan_id, service_type, primary_specialty, service_name=service_name,
+                )
             except Exception as e:
                 logger.error(f"Copago calculation error: {e}")
 
         if plan_id and primary_specialty:
             try:
-                hospital_results = self.hospitals.find_best(plan_id, primary_specialty, urgency)
+                hospital_results = self.hospitals.find_best(
+                    plan_id, primary_specialty, urgency, service_name=service_name,
+                )
             except Exception as e:
                 logger.error(f"Hospital search error: {e}")
 
-        # Step 5: Build structured response (antes del reply, así Gemini lo recibe)
+        # Step 6: Build structured response (antes del reply, así Gemini lo recibe)
+        # NOTA: el cliente solo necesita UNA especialidad (la primary). La lista
+        # completa se mantiene en memoria para el ranking interno pero no se expone.
         structured = StructuredResponse(
             sintomas=symptom_names,
             urgencia=urgency,
-            especialidades_sugeridas=[s.name for s in specialties],
+            especialidades_sugeridas=[primary_specialty] if primary_specialty else [],
             condiciones_probables=condiciones_probables,
+            servicio_recomendado=servicio,
             plan_seguro=copago_result.plan_nombre if copago_result else "",
+            costo_base=copago_result.costo_base if copago_result else 0.0,
             copago_estimado=copago_result.copago_estimado if copago_result else 0.0,
             moneda="USD",
             hospital_recomendado=hospital_results[0] if hospital_results else None,
@@ -120,24 +182,23 @@ class MedicalAgent:
             desglose_cobertura=copago_result.desglose if copago_result else "",
         )
 
-        # Step 6: Generate text reply (Gemini si está disponible, fallback a template)
+        # Step 7: Generate text reply (Gemini si está disponible, fallback a template)
         reply = await self._generate_reply_smart(
             request.message, raw_symptoms, specialties, urgency, alert,
-            copago_result, hospital_results, plan_id, condiciones_probables,
+            copago_result, hospital_results, plan_id, condiciones_probables, servicio,
         )
 
-        # Step 7: Determine if we need more info
+        # Step 8: Determine if we need more info
         needs_more_info = len(symptom_names) == 0 or (plan_id is None and len(symptom_names) > 0)
         clarification_questions = []
         if needs_more_info:
             clarification_questions = self._generate_clarifications(symptom_names, plan_id)
 
-        # Step 8: Solo añadir prefijo de alerta si Gemini no lo hizo y la urgencia es alta.
-        # Nada de disclaimers — el agente debe ser decisivo, no chatbot.
+        # Step 9: Solo añadir prefijo de alerta si Gemini no lo hizo y la urgencia es alta.
         if alert and urgency == "alta" and "EMERGENCIA" not in reply.upper():
             reply = f"EMERGENCIA: {alert}\n\n{reply}"
 
-        # Step 9: Update session
+        # Step 10: Update session
         self._update_session(session, request.message, reply, structured)
 
         return ChatResponse(
@@ -190,6 +251,217 @@ class MedicalAgent:
             logger.exception("[EndlessMedical] error inesperado: %s", e)
         return []
 
+    # ── Sub-paso: red-flags cardíacos (defensa contra NLP fallido) ──
+    @staticmethod
+    def _detect_cardiac_red_flags(
+        text: str, symptom_names: list[str]
+    ) -> dict | None:
+        """Inspecciona el texto crudo en busca de combinaciones que sugieren
+        síndrome coronario agudo (IAM, angina inestable). Si la suma de
+        evidencia supera un umbral, fuerza urgencia=alta y especialidad
+        cardiología/emergencias, e inyecta los síntomas que el NLP perdió.
+
+        Esto compensa fallos del extractor (tildes, sinónimos, fuzzy ruidoso).
+        """
+        t = strip_accents(text.lower())
+        sx = {s.lower() for s in symptom_names}
+
+        pecho = (
+            any(k in t for k in ["pecho", "torax", "toracico", "esternon"])
+            or "dolor toracico" in sx
+        )
+        presion = any(k in t for k in [
+            "presion", "opresion", "aplastante", "apretado",
+            "como un peso", "no me deja respirar",
+        ])
+        sudor = (
+            any(k in t for k in ["sudo", "sudor", "transpiracion", "sudoracion"])
+            or "sudoracion excesiva" in sx
+        )
+        brazo_izq = any(k in t for k in [
+            "brazo izquierdo", "brazo derecho", "irradia al brazo",
+            "se va al brazo", "dolor en el brazo",
+        ]) or "dolor en el brazo" in sx
+        mandibula = any(k in t for k in [
+            "mandibula", "quijada", "maxilar",
+        ])
+        cuello = any(k in t for k in ["cuello"]) and pecho
+        disnea = any(k in t for k in [
+            "falta el aire", "falta aire", "no puedo respirar",
+            "me cuesta respirar", "dificultad para respirar", "ahogo",
+        ]) or "disnea" in sx
+        esfuerzo = any(k in t for k in [
+            "al caminar", "al esfuerzo", "cuando camino", "subiendo",
+            "al subir escaleras", "haciendo esfuerzo",
+        ])
+
+        # Antecedentes de riesgo cardiovascular (cuentan pero no son síntomas)
+        antecedentes = sum([
+            any(k in t for k in ["hipertension", "presion alta", "hipertenso"]),
+            any(k in t for k in ["diabetes", "diabetico", "glucosa alta"]),
+            any(k in t for k in ["colesterol", "dislipidemia", "trigliceridos"]),
+            any(k in t for k in [
+                "arteria tapada", "arterias tapadas", "stent",
+                "cateterismo", "infarto previo", "bypass",
+            ]),
+            any(k in t for k in ["fumo", "fumador", "tabaco", "cigarrillo"]),
+        ])
+
+        score = 0
+        if pecho and (brazo_izq or mandibula or cuello): score += 4
+        if pecho and presion: score += 2
+        if pecho and sudor: score += 2
+        if pecho and disnea: score += 2
+        if pecho and esfuerzo: score += 2
+        if (brazo_izq or mandibula) and sudor: score += 1
+        score += min(antecedentes, 3)  # tope: 3 puntos por antecedentes
+
+        if score >= 5:
+            forced = ["dolor toracico"]
+            if sudor and "sudoracion excesiva" not in sx:
+                forced.append("sudoracion excesiva")
+            if disnea and "disnea" not in sx:
+                forced.append("disnea")
+            if brazo_izq and "dolor en el brazo" not in sx:
+                forced.append("dolor en el brazo")
+            return {
+                "urgency": "alta",
+                "specialties": ["cardiologia", "emergencias"],
+                "alert": (
+                    "Síndrome coronario agudo probable (dolor torácico "
+                    "irradiado + síntomas neurovegetativos + factores de "
+                    "riesgo). Llame al ECU-911 ahora, no conduzca usted mismo."
+                ),
+                "force_symptoms": forced,
+                "score": score,
+            }
+        return None
+
+    # ── Sub-paso: elección del servicio dentro de la especialidad ──
+    async def _pick_service(
+        self,
+        specialty: str,
+        urgency: str,
+        symptom_names: list[str],
+        condiciones: list[CondicionProbable],
+    ) -> ServicioRecomendado | None:
+        """Elige UN servicio dentro de la especialidad combinando:
+        (1) heurística determinística para casos obvios,
+        (2) Gemini si está disponible para el resto,
+        (3) fallback a 'consulta'."""
+        # Catálogo de servicios disponibles (cualquier hospital sirve, todos
+        # comparten el mismo catálogo).
+        sample = self.db.query(Hospital).filter(
+            Hospital.specialty_costs.isnot(None)
+        ).first()
+        catalog = sample.list_services(specialty) if sample else []
+
+        if not catalog:
+            return ServicioRecomendado(nombre="consulta", label="Consulta", razon="Default")
+
+        names = {s["name"] for s in catalog}
+
+        # 1a) Alta urgencia: si la especialidad tiene servicio de emergencia
+        # (típico de "emergencias"), úsalo de inmediato.
+        if urgency == "alta":
+            for k in ("atencion_emergencia", "estabilizacion", "trauma_mayor"):
+                if k in names:
+                    return ServicioRecomendado(
+                        nombre=k,
+                        label=next(s["label"] for s in catalog if s["name"] == k),
+                        razon="Triaje de emergencia",
+                    )
+
+            # 1b) Alta urgencia + especialidad clínica: usar el procedimiento
+            # diagnóstico crítico que se hace en el primer contacto (no consulta).
+            critical_by_specialty = {
+                "cardiologia": ("electrocardiograma", "Descartar infarto: ECG inmediato"),
+                "neurologia": ("tomografia_cerebral", "Descartar ACV: TAC de inmediato"),
+                "neumologia": ("rx_torax", "Descartar tromboembolia/neumonía: Rx tórax"),
+                "gastroenterologia": ("endoscopia_alta", "Sangrado o perforación: endoscopía urgente"),
+                "urologia": ("uroflujometria", "Evaluación urgente"),
+            }
+            target = critical_by_specialty.get(specialty)
+            if target and target[0] in names:
+                tname, treason = target
+                return ServicioRecomendado(
+                    nombre=tname,
+                    label=next(s["label"] for s in catalog if s["name"] == tname),
+                    razon=treason,
+                )
+
+        # 2) Heurística por palabras clave en condiciones / síntomas
+        joined = " ".join(
+            [c.nombre.lower() for c in condiciones]
+            + [s.lower() for s in symptom_names]
+        )
+        keyword_map = [
+            ("infarto", "electrocardiograma"),
+            ("isquemia", "electrocardiograma"),
+            ("arritmia", "electrocardiograma"),
+            ("colon", "colonoscopia"),
+            ("ulcera", "endoscopia_alta"),
+            ("reflujo", "endoscopia_alta"),
+            ("embarazo", "ecografia_pelvica"),
+            ("menstrual", "ecografia_pelvica"),
+            ("epilepsia", "electroencefalograma"),
+            ("convuls", "electroencefalograma"),
+            ("migraña", "tomografia_cerebral"),
+            ("cefalea severa", "tomografia_cerebral"),
+            ("asma", "espirometria"),
+            ("epoc", "espirometria"),
+            ("sueño", "polisomnografia"),
+            ("diabetes", "perfil_diabetes"),
+            ("tiroides", "perfil_tiroideo"),
+            ("alergia", "test_alergeno"),
+            ("catarata", "cirugia_catarata"),
+            ("apend", "apendicectomia"),
+            ("hernia", "hernioplastia"),
+            ("vesicul", "colecistectomia"),
+            ("cancer", "biopsia"),
+            ("tumor", "biopsia"),
+            ("varices", "varices_escleroterapia"),
+            ("calculo renal", "litotripsia"),
+            ("piedra rinon", "litotripsia"),
+        ]
+        for kw, target in keyword_map:
+            if kw in joined and target in names:
+                return ServicioRecomendado(
+                    nombre=target,
+                    label=next(s["label"] for s in catalog if s["name"] == target),
+                    razon=f"Sugerido por '{kw}' en el cuadro clínico",
+                )
+
+        # 3) Gemini elige (si está disponible)
+        if self.llm._available:
+            try:
+                pick = await self.llm.pick_service(
+                    specialty=specialty,
+                    urgency=urgency,
+                    symptoms=symptom_names,
+                    conditions=[{"nombre": c.nombre} for c in condiciones],
+                    catalog=catalog,
+                )
+                if pick.get("service"):
+                    name = pick["service"]
+                    label = next((s["label"] for s in catalog if s["name"] == name), name)
+                    return ServicioRecomendado(
+                        nombre=name,
+                        label=label,
+                        razon=pick.get("razon", "Sugerencia del modelo"),
+                    )
+            except Exception as e:
+                logger.warning("pick_service Gemini falló: %s", e)
+
+        # 4) Fallback: consulta (o el primer servicio del catálogo)
+        default_name = "consulta" if "consulta" in names else catalog[0]["name"]
+        default_label = next(s["label"] for s in catalog if s["name"] == default_name)
+        return ServicioRecomendado(
+            nombre=default_name,
+            label=default_label,
+            razon="Evaluación inicial estándar",
+        )
+
     # ── Reply: Gemini summarizer con fallback a template ───────────
     async def _generate_reply_smart(
         self,
@@ -202,6 +474,7 @@ class MedicalAgent:
         hospitals: list[HospitalRecommendation],
         plan_id: int | None,
         condiciones: list[CondicionProbable],
+        servicio: ServicioRecomendado | None = None,
     ) -> str:
         if self.llm._available and (symptoms or condiciones):
             try:
@@ -210,11 +483,16 @@ class MedicalAgent:
                     "sintomas_detectados": [s.normalized for s in symptoms],
                     "urgencia": urgency,
                     "alerta": alert,
-                    "especialidades_sugeridas": [s.name for s in specialties],
+                    "especialidad_sugerida": specialties[0].name if specialties else None,
                     "condiciones_probables": [
                         {"nombre": c.nombre, "probabilidad": c.probabilidad}
                         for c in condiciones
                     ],
+                    "servicio_recomendado": (
+                        {"nombre": servicio.nombre, "label": servicio.label, "razon": servicio.razon}
+                        if servicio else None
+                    ),
+                    "costo_base_usd": copago.costo_base if copago else None,
                     "copago_estimado_usd": copago.copago_estimado if copago else None,
                     "plan_seguro": copago.plan_nombre if copago else None,
                     "desglose": copago.desglose if copago else None,
@@ -237,7 +515,7 @@ class MedicalAgent:
 
         return self._generate_reply(
             user_message, symptoms, specialties, urgency, alert,
-            copago, hospitals, plan_id,
+            copago, hospitals, plan_id, servicio,
         )
 
     def _generate_reply(
@@ -250,6 +528,7 @@ class MedicalAgent:
         copago: CopagoResult | None,
         hospitals: list[HospitalRecommendation],
         plan_id: int | None,
+        servicio: ServicioRecomendado | None = None,
     ) -> str:
         if not symptoms and not specialties:
             return (
@@ -265,13 +544,18 @@ class MedicalAgent:
             parts.append(f"Sintomas: {', '.join(symptom_names)}.")
 
         if specialties:
-            spec_names = [s.name for s in specialties]
-            parts.append(f"Especialidad sugerida: {', '.join(spec_names)}.")
+            parts.append(f"Especialidad sugerida: {specialties[0].name}.")
+
+        if servicio:
+            parts.append(f"Servicio recomendado: {servicio.label}.")
 
         parts.append(f"Urgencia: {urgency}.")
 
         if copago:
-            parts.append(f"Copago estimado: ${copago.copago_estimado:.2f} USD.")
+            parts.append(
+                f"Costo base ${copago.costo_base:.2f} USD. "
+                f"Copago estimado: ${copago.copago_estimado:.2f} USD."
+            )
             parts.append(f"Desglose: {copago.desglose}")
 
         if hospitals:

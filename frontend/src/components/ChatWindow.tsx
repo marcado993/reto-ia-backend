@@ -3,9 +3,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
-import { sendMessage, fetchHealthPlans } from '@/lib/api'
+import { sendMessage, fetchHealthPlans, fetchProvidersByPlan } from '@/lib/api'
 import {
   ChatMessage, HealthPlan, AgentStep, StructuredResponse,
+  NetworkProvider,
   AGENT_STEP_ICONS, URGENCY_CONFIG, SPECIALTY_ICONS,
 } from '@/lib/types'
 import MiniMap from './MiniMap'
@@ -115,27 +116,115 @@ function RightPanel({ data }: { data: StructuredResponse | null }) {
             </div>
           )}
 
-          {/* Especialidades */}
+          {/* Especialidad sugerida (una sola) */}
           {data.especialidades_sugeridas.length > 0 && (
             <div>
-              <div className="rp-section-lbl"><span>👨‍⚕️</span> Especialidades</div>
+              <div className="rp-section-lbl"><span>👨‍⚕️</span> Especialidad sugerida</div>
               <div className="chips">
-                {data.especialidades_sugeridas.map(s => (
-                  <span key={s} className="chip chip-spec">
-                    {SPECIALTY_ICONS[s] ?? '🏥'} {s.replace(/_/g, ' ')}
-                  </span>
-                ))}
+                {(() => {
+                  const s = data.especialidades_sugeridas[0]
+                  return (
+                    <span key={s} className="chip chip-spec">
+                      {SPECIALTY_ICONS[s] ?? '🏥'} {s.replace(/_/g, ' ')}
+                    </span>
+                  )
+                })()}
               </div>
             </div>
           )}
 
-          {/* Copago */}
-          {data.copago_estimado > 0 && (
+          {/* Servicio recomendado */}
+          {data.servicio_recomendado && (
             <div>
-              <div className="rp-section-lbl"><span>💰</span> Copago estimado · {data.plan_seguro}</div>
-              <div className="copago-num">${data.copago_estimado.toFixed(2)}</div>
-              <div className="copago-sub">{data.moneda} · Estimado según tu cobertura</div>
-              {data.desglose_cobertura && <div className="copago-desc">{data.desglose_cobertura}</div>}
+              <div className="rp-section-lbl"><span>🧪</span> Servicio recomendado</div>
+              <div style={{
+                background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10,
+                padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 4,
+              }}>
+                <div style={{ fontSize: 13.5, fontWeight: 800, color: '#065F46' }}>
+                  {data.servicio_recomendado.label}
+                </div>
+                {data.servicio_recomendado.razon && (
+                  <div style={{ fontSize: 11.5, color: '#047857' }}>
+                    {data.servicio_recomendado.razon}
+                  </div>
+                )}
+                {data.costo_base > 0 && (
+                  <div style={{ fontSize: 11.5, color: '#065F46', marginTop: 2 }}>
+                    Costo del servicio: <strong>${data.costo_base.toFixed(2)} {data.moneda}</strong>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Condiciones probables */}
+          {data.condiciones_probables && data.condiciones_probables.length > 0 && (
+            <div>
+              <div className="rp-section-lbl"><span>🔬</span> Posibles condiciones</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {data.condiciones_probables.slice(0, 3).map((c, i) => {
+                  const pct = Math.round((c.probabilidad || 0) * 100)
+                  return (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '6px 8px', background: '#F8FAFC',
+                      border: '1px solid #E2E8F0', borderRadius: 8,
+                    }}>
+                      <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: '#0F172A', minWidth: 0 }}>
+                        {c.nombre}
+                      </div>
+                      <div style={{
+                        height: 5, width: 60, background: '#E2E8F0', borderRadius: 99, overflow: 'hidden', flexShrink: 0,
+                      }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: '#0EA5E9' }} />
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#0369A1', minWidth: 30, textAlign: 'right' }}>
+                        {pct}%
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Copago + Costo */}
+          {(data.costo_base > 0 || data.copago_estimado > 0) && (
+            <div>
+              <div className="rp-section-lbl"><span>💰</span> Costo y copago · {data.plan_seguro || 'Sin plan'}</div>
+              <div style={{
+                background: 'linear-gradient(135deg, #EFF6FF 0%, #F0FDFA 100%)',
+                border: '1px solid #BFDBFE', borderRadius: 12, padding: 12,
+                display: 'flex', flexDirection: 'column', gap: 6,
+              }}>
+                {data.costo_base > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                    <span style={{ color: '#475569' }}>Costo del servicio</span>
+                    <span style={{ fontWeight: 700, color: '#0F172A' }}>${data.costo_base.toFixed(2)}</span>
+                  </div>
+                )}
+                {data.costo_base > 0 && data.copago_estimado >= 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                    <span style={{ color: '#475569' }}>Cubierto por tu plan</span>
+                    <span style={{ fontWeight: 700, color: '#059669' }}>
+                      ${Math.max(data.costo_base - data.copago_estimado, 0).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+                <div style={{ height: 1, background: '#BFDBFE', margin: '2px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: '#0F172A' }}>Tú pagas</span>
+                  <span style={{ fontSize: 22, fontWeight: 800, color: '#1d4ed8', fontFamily: 'JetBrains Mono, monospace' }}>
+                    ${data.copago_estimado.toFixed(2)}
+                  </span>
+                </div>
+                {data.desglose_cobertura && (
+                  <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.4, marginTop: 2 }}>
+                    {data.desglose_cobertura}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -186,6 +275,7 @@ export default function ChatWindow() {
   const [showPlanModal,setShowPlanModal] = useState(false)
   const [activeNav,    setActiveNav]    = useState('chat')
   const [backendOk,    setBackendOk]    = useState<boolean | null>(null)
+  const [networkProviders, setNetworkProviders] = useState<NetworkProvider[]>([])
 
   const bottomRef   = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -205,6 +295,16 @@ export default function ChatWindow() {
     const t = setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), 80)
     return () => clearTimeout(t)
   }, [messages, agentSteps])
+
+  // Cargar prestadores de la red cuando se selecciona/cambia el plan
+  useEffect(() => {
+    if (!planId) { setNetworkProviders([]); return }
+    let cancel = false
+    fetchProvidersByPlan(planId)
+      .then(res => { if (!cancel) setNetworkProviders(res.providers || []) })
+      .catch(() => { if (!cancel) setNetworkProviders([]) })
+    return () => { cancel = true }
+  }, [planId])
 
   useEffect(() => {
     if (!textareaRef.current) return
@@ -466,11 +566,21 @@ export default function ChatWindow() {
                         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                           style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
 
-                          {/* Summary row: copago */}
+                          {/* Summary row: servicio + copago */}
                           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {sd.servicio_recomendado && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: '#F0FDF4', color: '#065F46', border: '1px solid #BBF7D0' }}>
+                                🧪 {sd.servicio_recomendado.label}
+                              </span>
+                            )}
+                            {sd.costo_base > 0 && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: '#F8FAFC', color: '#334155', border: '1px solid #CBD5E1' }}>
+                                Costo: ${sd.costo_base.toFixed(2)}
+                              </span>
+                            )}
                             {sd.copago_estimado > 0 ? (
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: '#EFF6FF', color: '#1d4ed8', border: '1px solid #BFDBFE' }}>
-                                💰 Copago Estimado: ${sd.copago_estimado.toFixed(2)} {sd.moneda}
+                                💰 Tú pagas: ${sd.copago_estimado.toFixed(2)} {sd.moneda}
                               </span>
                             ) : (
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: '#D1FAE5', color: '#065F46', border: '1px solid #A7F3D0' }}>
@@ -480,9 +590,9 @@ export default function ChatWindow() {
                           </div>
 
                           {/* Map inline in chat */}
-                          {sd.hospitales_comparacion.some(h => h.lat !== null) && (
-                            <div style={{ height: 200, borderRadius: 12, overflow: 'hidden', border: '1px solid #E2E8F0', marginTop: 2 }}>
-                              <MiniMap hospitals={sd.hospitales_comparacion} />
+                          {(sd.hospitales_comparacion.some(h => h.lat !== null) || networkProviders.length > 0) && (
+                            <div style={{ height: 320, borderRadius: 12, overflow: 'hidden', border: '1px solid #E2E8F0', marginTop: 2, boxShadow: '0 2px 8px rgba(15,23,42,.06)' }}>
+                              <MiniMap hospitals={sd.hospitales_comparacion} networkProviders={networkProviders} />
                             </div>
                           )}
                         </motion.div>

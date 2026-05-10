@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import unicodedata
 from pathlib import Path
 
 from rapidfuzz import fuzz, process
@@ -16,41 +17,79 @@ DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 WORD_BOUNDARY_RE = re.compile(r'\b')
 
 
+def strip_accents(text: str) -> str:
+    """Quita tildes/acentos para que 'presión' matchee con 'presion'."""
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
 TEXT_NORMALIZATIONS = {
+    # ── Cabeza / cuello ──────────────────────────────────────────
+    "me duele la cabeza": "cefalea",
+    "me duele el cuello": "dolor en el cuello",
+    "rigidez en el cuello": "rigidez de nuca",
+    "cuello rigido": "rigidez de nuca",
+    "me duele el oido": "dolor de oido",
+    "me duele la garganta": "dolor de garganta",
+    "no puedo dormir": "insomnio",
+    # ── Tórax / cardio ───────────────────────────────────────────
     "me duele el pecho": "dolor toracico",
     "me duele el torax": "dolor toracico",
-    "me duele la cabeza": "cefalea",
-    "me duele la barriga": "dolor abdominal",
-    "me duele el estomago": "dolor abdominal",
-    "me duele la espalda": "dolor lumbar",
+    "dolor en el pecho": "dolor toracico",
+    "presion en el pecho": "dolor toracico",
+    "presion fuerte en el pecho": "dolor toracico",
+    "opresion en el pecho": "dolor toracico",
+    "siento presion": "dolor toracico",
+    "presion fuerte pecho": "dolor toracico",
+    "me aprieta el pecho": "dolor toracico",
+    "ardor en el pecho": "dolor toracico",
+    "me duele el corazon": "dolor toracico",
+    "dolor irradiado al brazo": "dolor en el brazo",
+    "dolor en la mandibula": "dolor toracico",
+    "dolor en la quijada": "dolor toracico",
+    "me duele la mandibula": "dolor toracico",
+    "tengo palpitaciones": "palpitaciones",
+    # ── Respiratorio ─────────────────────────────────────────────
     "no puedo respirar": "disnea",
     "me cuesta respirar": "disnea",
+    "me falta el aire": "disnea",
+    "falta de aire": "disnea",
+    "ahogamiento": "disnea",
+    "ahogo": "disnea",
+    "respiro con dificultad": "disnea",
+    # ── Sudoración / neurovegetativo ────────────────────────────
+    "sudo mucho": "sudoracion excesiva",
+    "sudo frio": "sudoracion excesiva",
+    "sudor frio": "sudoracion excesiva",
+    "tengo sudor frio": "sudoracion excesiva",
+    "estoy sudando": "sudoracion excesiva",
+    "transpiracion excesiva": "sudoracion excesiva",
+    # ── Abdomen ──────────────────────────────────────────────────
+    "me duele la barriga": "dolor abdominal",
+    "me duele el estomago": "dolor abdominal",
+    "tengo colico": "dolor abdominal",
+    "me duele la espalda": "dolor lumbar",
+    "se me sale el estomago": "ardor de estomago",
+    # ── Piernas / extremidades ──────────────────────────────────
     "se me hincharon las piernas": "hinchazon de piernas",
     "se me hincho la cara": "hinchazon",
     "se me durmieron las manos": "entumecimiento",
     "se me durmieron los pies": "entumecimiento",
+    # ── Piel ─────────────────────────────────────────────────────
     "me pica la piel": "picazon",
+    "se me salen ronchas": "erupcion cutanea",
+    # ── Genitourinario ───────────────────────────────────────────
     "tengo mucha sed": "sed excesiva",
     "orino mucho": "orina frecuente",
     "me arde al orinar": "disuria",
-    "se me sale el estomago": "ardor de estomago",
+    # ── Generales ────────────────────────────────────────────────
     "me marea": "mareo",
-    "tengo palpitaciones": "palpitaciones",
-    "se me salen ronchas": "erupcion cutanea",
     "tengo sangrado": "sangrado",
-    "me duele el cuello": "dolor en el cuello",
-    "no puedo dormir": "insomnio",
-    "me duele el oido": "dolor de oido",
-    "rigidez en el cuello": "rigidez de nuca",
-    "cuello rigido": "rigidez de nuca",
-    "siento presion": "dolor toracico",
+    "me sangra": "sangrado",
     "me-desmayo": "perdida de conciencia",
     "me-desmaye": "perdida de conciencia",
     "tengo tos": "tos",
     "tengo fiebre": "fiebre",
-    "me sangra": "sangrado",
-    "tengo colico": "dolor abdominal",
-    "me duele la garganta": "dolor de garganta",
 }
 
 
@@ -70,7 +109,8 @@ class NLPService:
             logger.warning("No symptoms loaded in DB, using fallback")
             return self._extract_from_fallback(text)
 
-        text_lower_raw = text.lower().strip()
+        # Normalizar: minúsculas + sin tildes para que "presión" matchee "presion"
+        text_lower_raw = strip_accents(text.lower().strip())
         for colloquial, medical in TEXT_NORMALIZATIONS.items():
             words = colloquial.split()
             if all(w in text_lower_raw for w in words):

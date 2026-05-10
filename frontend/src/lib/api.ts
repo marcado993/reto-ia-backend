@@ -66,6 +66,21 @@ export async function searchHospitals(planId: number, specialty?: string, urgenc
   return res.json()
 }
 
+// ── Providers (red de la aseguradora) ─────────────────────────
+export async function fetchProvidersByPlan(planId: number) {
+  const res = await fetch(`${API_BASE}/providers/by-plan/${planId}`)
+  if (!res.ok) throw new Error(`Error ${res.status}`)
+  return res.json() as Promise<{
+    plan_id: number
+    plan_name: string
+    provider_network: string
+    aseguradora: string | null
+    providers: import('./types').NetworkProvider[]
+    count: number
+    note?: string
+  }>
+}
+
 // ── Health check ──────────────────────────────────────────────
 export async function healthCheck() {
   const res = await fetch(process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:8000/health')

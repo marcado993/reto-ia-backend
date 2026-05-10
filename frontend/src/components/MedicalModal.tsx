@@ -56,16 +56,19 @@ export default function MedicalModal({ data, onClose }: { data: StructuredRespon
             )}
           </div>
 
-          {/* Especialidades */}
+          {/* Especialidad sugerida (una sola) */}
           {data.especialidades_sugeridas.length > 0 && (
             <div>
-              <div className="modal-section-label">Especialidades sugeridas</div>
+              <div className="modal-section-label">Especialidad sugerida</div>
               <div className="chip-row">
-                {data.especialidades_sugeridas.map(s => (
-                  <span key={s} className="chip chip-specialty">
-                    {SPECIALTY_ICONS[s] ?? '🏥'} {s.replace(/_/g, ' ')}
-                  </span>
-                ))}
+                {(() => {
+                  const s = data.especialidades_sugeridas[0]
+                  return (
+                    <span key={s} className="chip chip-specialty">
+                      {SPECIALTY_ICONS[s] ?? '🏥'} {s.replace(/_/g, ' ')}
+                    </span>
+                  )
+                })()}
               </div>
             </div>
           )}

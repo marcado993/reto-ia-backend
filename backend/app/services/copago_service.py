@@ -21,14 +21,30 @@ class CopagoService:
         service_type: str,
         specialty: str | None = None,
         hospital_id: int | None = None,
+        service_name: str | None = None,
     ) -> CopagoResult:
+        """Calcula el copago.
+
+        - `service_type`: "consulta" | "emergencia" | "hospitalizacion" → manda
+          la regla del plan (copago fijo o porcentual).
+        - `service_name`: nombre del servicio específico dentro de la especialidad
+          (p.ej. "ecocardiograma"). Si está, se usa para conseguir el `base_cost`
+          del hospital, no el de la consulta default.
+        """
         plan = self.db.query(HealthPlan).filter(HealthPlan.id == plan_id).first()
         if not plan:
             raise ValueError(f"Plan {plan_id} not found")
 
-        base_cost = self._get_base_cost(service_type, specialty, hospital_id)
+        base_cost, service_label = self._get_base_cost_and_label(
+            service_type, specialty, hospital_id, service_name
+        )
 
         if plan.is_public:
+            desglose = (
+                f"Su plan {plan.name} cubre el 100% del servicio "
+                f"({service_label}). Costo base referencial: ${float(base_cost):.2f}. "
+                f"Usted paga: $0.00."
+            )
             return CopagoResult(
                 plan_nombre=plan.name,
                 plan_tipo=plan.type,
@@ -37,7 +53,7 @@ class CopagoService:
                 copago_estimado=0.0,
                 moneda="USD",
                 metodo="Cobertura total - seguro publico",
-                desglose=f"Su plan {plan.name} cubre el 100% del servicio. Copago: $0.00",
+                desglose=desglose,
                 deducible_restante=None,
             )
 
@@ -48,19 +64,18 @@ class CopagoService:
         if plan.copago_consulta_usd and service_type == "consulta":
             desglose = (
                 f"Su plan {plan.name} tiene copago fijo de ${float(plan.copago_consulta_usd):.2f} "
-                f"para consultas. Costo base del servicio: ${float(base_cost):.2f}."
+                f"para consultas. Servicio: {service_label}. Costo base: ${float(base_cost):.2f}."
             )
         elif plan.copago_emergencia_usd and service_type == "emergencia":
             desglose = (
                 f"Su plan {plan.name} tiene copago fijo de ${float(plan.copago_emergencia_usd):.2f} "
-                f"para emergencias. Costo base del servicio: ${float(base_cost):.2f}."
+                f"para emergencias. Servicio: {service_label}. Costo base: ${float(base_cost):.2f}."
             )
         else:
             desglose = (
-                f"Su plan {plan.name} cubre el {cobertura_pct:.0f}% "
-                f"(${float(base_cost) * (1 - float(plan.copago_pct)):.2f}). "
-                f"Usted paga el {float(plan.copago_pct)*100:.0f}% = ${copago:.2f}. "
-                f"Costo base: ${float(base_cost):.2f}."
+                f"Su plan {plan.name} cubre el {cobertura_pct:.0f}% del servicio "
+                f"({service_label}, costo base ${float(base_cost):.2f}). "
+                f"Usted paga el {float(plan.copago_pct)*100:.0f}% = ${copago:.2f}."
             )
 
         deducible_restante = None
@@ -79,29 +94,56 @@ class CopagoService:
             deducible_restante=deducible_restante,
         )
 
-    def _get_base_cost(
-        self, service_type: str, specialty: str | None, hospital_id: int | None
-    ) -> Decimal:
+    # ──────────────────────────────────────────────────────────
+    def _get_base_cost_and_label(
+        self,
+        service_type: str,
+        specialty: str | None,
+        hospital_id: int | None,
+        service_name: str | None,
+    ) -> tuple[Decimal, str]:
+        """Devuelve (base_cost, label_human_readable) para el servicio."""
+        # 1) Si hay hospital_id + especialidad, usar su tarifario expandido
         if hospital_id:
             hospital = self.db.query(Hospital).filter(Hospital.id == hospital_id).first()
             if hospital and specialty:
-                cost = hospital.get_cost(specialty)
-                if cost is not None:
-                    return Decimal(str(cost))
-            if hospital and hospital.specialty_costs:
-                general = hospital.specialty_costs.get("medicina_general")
-                if general is not None:
-                    return Decimal(str(general))
+                price = hospital.get_service_price(specialty, service_name)
+                label = self._lookup_label(hospital, specialty, service_name)
+                if price is not None:
+                    return Decimal(str(price)), label
 
+        # 2) Tabla MedicalService por especialidad
         if specialty:
-            service = self.db.query(MedicalService).filter(
-                MedicalService.specialty.ilike(specialty)
-            ).first()
+            service = (
+                self.db.query(MedicalService)
+                .filter(MedicalService.specialty.ilike(specialty))
+                .first()
+            )
             if service and service.base_cost_usd:
-                return service.base_cost_usd
+                return service.base_cost_usd, service.description or specialty
 
-        default_costs = {"consulta": Decimal("40"), "emergencia": Decimal("80"), "hospitalizacion": Decimal("200")}
-        return default_costs.get(service_type, Decimal("40"))
+        # 3) Defaults por tipo
+        defaults = {
+            "consulta": (Decimal("40"), "Consulta médica"),
+            "emergencia": (Decimal("80"), "Atención de emergencia"),
+            "hospitalizacion": (Decimal("200"), "Hospitalización"),
+        }
+        return defaults.get(service_type, (Decimal("40"), "Consulta médica"))
+
+    @staticmethod
+    def _lookup_label(hospital: Hospital, specialty: str, service_name: str | None) -> str:
+        services = hospital.list_services(specialty)
+        if not services:
+            return specialty.replace("_", " ").title()
+        if service_name:
+            for s in services:
+                if s["name"] == service_name:
+                    return s["label"]
+        # default: consulta
+        for s in services:
+            if s["name"] == "consulta":
+                return s["label"]
+        return services[0]["label"]
 
     @staticmethod
     def _determine_method(plan: HealthPlan, service_type: str) -> str:

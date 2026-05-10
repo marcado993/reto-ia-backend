@@ -1,6 +1,5 @@
 """Endpoints de debug para inspeccionar el pipeline de diagnóstico.
-Útil durante el hackathon para ver QUÉ está mapeando Gemini y QUÉ está devolviendo
-EndlessMedical antes de envolverlo en el ChatResponse final.
+Útil para ver QUÉ mapea el LLM (OpenRouter/Gemini) y QUÉ devuelve EndlessMedical.
 """
 
 from fastapi import APIRouter
@@ -34,7 +33,7 @@ async def debug_diagnose(req: DebugDiagnoseRequest):
         "input": req.model_dump(),
         "llm_disponible": llm._available,
         "valid_features_count": 0,
-        "features_mapeadas_por_gemini": {},
+        "features_mapeadas_por_llm": {},
         "diagnostico": [],
         "error": None,
     }
@@ -45,17 +44,19 @@ async def debug_diagnose(req: DebugDiagnoseRequest):
         out["valid_features_sample"] = valid_features[:30]
 
         if not llm._available:
-            out["error"] = "Gemini no está disponible (revisa GEMINI_API_KEY)"
+            out["error"] = (
+                "LLM no disponible (configura OPENROUTER_API_KEY o GEMINI_API_KEY)"
+            )
             return out
 
         features = await llm.map_text_to_features(
             req.message, valid_features, age=req.age, gender=req.gender
         )
-        out["features_mapeadas_por_gemini"] = features
+        out["features_mapeadas_por_llm"] = features
 
         if not features:
             out["error"] = (
-                "Gemini no mapeó ninguna feature válida. Mensaje muy corto o "
+                "El LLM no mapeó ninguna feature válida. Mensaje muy corto o "
                 "sin datos clínicos claros."
             )
             return out
