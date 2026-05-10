@@ -30,7 +30,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #__next {
   height: 100%; height: 100dvh; overflow: hidden;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Manrope', system-ui, sans-serif;
   background: var(--bg);
   color: var(--navy);
   -webkit-font-smoothing: antialiased;
