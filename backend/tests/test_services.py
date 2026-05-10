@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 from app.services.rule_engine import RuleEngine
 from app.services.copago_service import CopagoService
 from app.services.hospital_service import HospitalService
-from app.services.nlp_service import NLPService
 
 
 class TestRuleEngine:
@@ -60,16 +59,6 @@ class TestCopagoService:
         service = CopagoService(mock_db)
         result = service.calculate(plan_id=3, service_type="consulta")
         assert result.copago_estimado == 6.0
-
-
-class TestNLPService:
-    def test_symptom_model_matches(self):
-        mock_symptom = MagicMock()
-        mock_symptom.name = "dolor toracico"
-        mock_symptom.synonyms = ["dolor de pecho", "presion en el pecho"]
-        assert mock_symptom.matches("dolor de pecho") is True
-        assert mock_symptom.matches("dolor toracico") is True
-        assert mock_symptom.matches("dolor de cabeza") is False
 
 
 class TestHospitalService:

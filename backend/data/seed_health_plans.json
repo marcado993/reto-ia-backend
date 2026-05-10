@@ -1,9 +1,9 @@
 [
   {
-    "name": "Saludsa",
+    "name": "Saludsa Star",
     "type": "private",
     "is_public": false,
-    "copago_consulta_usd": 10.0,
+    "copago_consulta_usd": 8.0,
     "copago_emergencia_usd": 25.0,
     "copago_pct": 0.20,
     "deductible_usd": 500.0,
@@ -12,10 +12,22 @@
     "exempt_services": ["chequeo_preventivo"]
   },
   {
-    "name": "BMI Ecuador",
+    "name": "Saludsa Sky",
     "type": "private",
     "is_public": false,
-    "copago_consulta_usd": 8.0,
+    "copago_consulta_usd": 6.0,
+    "copago_emergencia_usd": 20.0,
+    "copago_pct": 0.15,
+    "deductible_usd": 350.0,
+    "max_oop_usd": 5000.0,
+    "provider_network": "saludsa_red",
+    "exempt_services": ["chequeo_preventivo", "maternidad"]
+  },
+  {
+    "name": "BMI Unique",
+    "type": "private",
+    "is_public": false,
+    "copago_consulta_usd": 5.0,
     "copago_emergencia_usd": 20.0,
     "copago_pct": 0.10,
     "deductible_usd": 300.0,
@@ -24,7 +36,19 @@
     "exempt_services": ["chequeo_preventivo", "maternidad"]
   },
   {
-    "name": "Bupa Ecuador",
+    "name": "BMI 360",
+    "type": "private",
+    "is_public": false,
+    "copago_consulta_usd": 3.0,
+    "copago_emergencia_usd": 15.0,
+    "copago_pct": 0.10,
+    "deductible_usd": 200.0,
+    "max_oop_usd": 3000.0,
+    "provider_network": "bmi_red",
+    "exempt_services": ["chequeo_preventivo"]
+  },
+  {
+    "name": "Bupa Global Care Esencia",
     "type": "private",
     "is_public": false,
     "copago_consulta_usd": 6.0,
@@ -36,7 +60,19 @@
     "exempt_services": ["chequeo_preventivo"]
   },
   {
-    "name": "Humana S.A.",
+    "name": "Bupa Global Care Plus",
+    "type": "private",
+    "is_public": false,
+    "copago_consulta_usd": 4.0,
+    "copago_emergencia_usd": 20.0,
+    "copago_pct": 0.15,
+    "deductible_usd": 400.0,
+    "max_oop_usd": 4500.0,
+    "provider_network": "bupa_red_interna",
+    "exempt_services": ["chequeo_preventivo", "maternidad"]
+  },
+  {
+    "name": "Humana Red CAM",
     "type": "private",
     "is_public": false,
     "copago_consulta_usd": 12.0,
@@ -48,6 +84,18 @@
     "exempt_services": ["chequeo_preventivo"]
   },
   {
+    "name": "Humana Copago",
+    "type": "private",
+    "is_public": false,
+    "copago_consulta_usd": 8.0,
+    "copago_emergencia_usd": 25.0,
+    "copago_pct": 0.10,
+    "deductible_usd": 250.0,
+    "max_oop_usd": 3500.0,
+    "provider_network": "humana_red",
+    "exempt_services": ["chequeo_preventivo", "maternidad"]
+  },
+  {
     "name": "IESS - Seguro General",
     "type": "public",
     "is_public": true,
@@ -57,6 +105,18 @@
     "deductible_usd": 0,
     "max_oop_usd": 0,
     "provider_network": "iess",
+    "exempt_services": ["consulta_general", "emergencia", "hospitalizacion", "laboratorio"]
+  },
+  {
+    "name": "ISSFA - Fuerzas Armadas",
+    "type": "public",
+    "is_public": true,
+    "copago_consulta_usd": null,
+    "copago_emergencia_usd": null,
+    "copago_pct": 0,
+    "deductible_usd": 0,
+    "max_oop_usd": 0,
+    "provider_network": "issfa",
     "exempt_services": ["consulta_general", "emergencia", "hospitalizacion", "laboratorio"]
   }
 ]

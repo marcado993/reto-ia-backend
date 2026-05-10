@@ -11,6 +11,8 @@ class ChatRequest(BaseModel):
     plan_id: int | None = None
     age: int | None = Field(None, ge=0, le=120)
     gender: str | None = Field(None, pattern="^(male|female)$")
+    user_lat: float | None = Field(None, ge=-90, le=90)
+    user_lon: float | None = Field(None, ge=-180, le=180)
 
 
 class HospitalRecommendation(BaseModel):

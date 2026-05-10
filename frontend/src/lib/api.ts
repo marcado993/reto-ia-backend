@@ -7,12 +7,16 @@ export interface SendMessageParams {
   planId: number | null
   age?: number | null
   gender?: 'male' | 'female' | null
+  userLat?: number | null
+  userLon?: number | null
 }
 
-export async function sendMessage({ message, sessionId, planId, age, gender }: SendMessageParams) {
+export async function sendMessage({ message, sessionId, planId, age, gender, userLat, userLon }: SendMessageParams) {
   const body: Record<string, unknown> = { message, session_id: sessionId, plan_id: planId }
   if (age)    body.age    = age
   if (gender) body.gender = gender
+  if (userLat != null) body.user_lat = userLat
+  if (userLon != null) body.user_lon = userLon
 
   const res = await fetch(`${API_BASE}/chat/`, {
     method: 'POST',

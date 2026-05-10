@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.hospital import Hospital
 from app.models.health_plan import HealthPlan
 from app.schemas.chat import HospitalRecommendation
+from app.services.provider_directory import ProviderDirectory
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class HospitalService:
         if not plan:
             raise ValueError(f"Plan {plan_id} not found")
 
+        # ── 1) Buscar en tabla SQL (hospitales con precios reales) ───
         network = plan.provider_network
         hospitals = self.db.query(Hospital).filter(Hospital.network == network).all()
 
@@ -79,9 +81,77 @@ class HospitalService:
             other = [h for h in recs if h.tipo not in ("public", "iess", "issfa")]
             recs = public + other
 
-        recs.sort(key=lambda h: (h.copago_paciente, h.distancia_km or 9999))
+        # ── 2) Buscar en JSON unificado (prestadores geolocalizados) ──
+        # Solo para planes privados (públicos no tienen red privada en el JSON)
+        json_recs: list[HospitalRecommendation] = []
+        if not plan.is_public:
+            service_type = "emergencia" if urgency == "alta" else "consulta"
+            try:
+                json_entries = ProviderDirectory.find_best(
+                    provider_network=plan.provider_network,
+                    urgency=urgency,
+                    user_lat=user_lat,
+                    user_lon=user_lon,
+                    limit=limit * 2,  # pedimos más para tener opciones de merge
+                )
+                for entry in json_entries:
+                    distance = None
+                    if user_lat is not None and user_lon is not None:
+                        distance = ProviderDirectory._haversine_km(
+                            user_lat, user_lon,
+                            float(entry["latitud"]), float(entry["longitud"])
+                        )
+                    json_recs.append(
+                        ProviderDirectory.to_recommendation(
+                            entry=entry,
+                            plan=plan,
+                            service_type=service_type,
+                            distance=distance,
+                        )
+                    )
+            except Exception as e:
+                logger.warning("Error cargando prestadores del JSON: %s", e)
 
-        return recs[:limit]
+        # ── 3) Merge y deduplicar por nombre ──────────────────────────
+        seen_names: set[str] = set()
+        merged: list[HospitalRecommendation] = []
+
+        # Primero los de SQL (tienen precios reales por especialidad)
+        for r in recs:
+            norm = r.nombre.lower().strip()
+            if norm not in seen_names:
+                seen_names.add(norm)
+                merged.append(r)
+
+        # Luego los del JSON que no estén ya en la lista
+        for r in json_recs:
+            norm = r.nombre.lower().strip()
+            if norm not in seen_names:
+                seen_names.add(norm)
+                merged.append(r)
+
+        # ── 4) Aplicar offsets determinísticos a duplicados ──────────
+        merged = self._apply_deterministic_offsets(merged)
+
+        # Recalcular distancias después de offsets (si hay ubicación)
+        if user_lat is not None and user_lon is not None:
+            for r in merged:
+                if r.lat is not None and r.lon is not None:
+                    r.distancia_km = round(
+                        self._haversine_km(user_lat, user_lon, r.lat, r.lon), 1
+                    )
+
+        # ── 5) Ordenar: primero por distancia, luego por copago ───────
+        # Si hay ubicación del usuario, priorizamos cercanía.
+        # Si no hay ubicación, priorizamos menor copago.
+        has_location = user_lat is not None and user_lon is not None
+
+        if has_location:
+            merged.sort(key=lambda h: (h.distancia_km or 9999, h.copago_paciente))
+        else:
+            merged.sort(key=lambda h: (h.copago_paciente, h.distancia_km or 9999))
+
+        return merged[:limit]
 
     def _calculate_copago(
         self,
@@ -116,3 +186,45 @@ class HospitalService:
         )
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
         return R * c
+
+    @staticmethod
+    def _hash_offset(name: str, max_offset: float = 0.003) -> tuple[float, float]:
+        """Genera un offset determinístico (lat, lon) basado en el hash del nombre.
+
+        Mismo nombre = mismo offset siempre. Diferentes nombres = offsets
+        distribuidos en un círculo de radio máximo ~max_offset grados
+        (~300 m en Ecuador).
+        """
+        h = sum(ord(c) for c in name)
+        angle = (h % 360) * math.pi / 180
+        radius = (h % 100) / 100 * max_offset
+        lat_off = radius * math.cos(angle)
+        lon_off = radius * math.sin(angle)
+        return lat_off, lon_off
+
+    @staticmethod
+    def _apply_deterministic_offsets(
+        recs: list[HospitalRecommendation],
+    ) -> list[HospitalRecommendation]:
+        """Aplica offsets determinísticos a hospitales con coordenadas duplicadas.
+
+        Detecta grupos de hospitales que comparten lat/lon exactos y les
+        asigna offsets únicos para que se vean separados en el mapa.
+        """
+        # Agrupar por coordenadas exactas
+        groups: dict[tuple[float, float], list[int]] = {}
+        for i, r in enumerate(recs):
+            if r.lat is not None and r.lon is not None:
+                key = (round(r.lat, 6), round(r.lon, 6))
+                groups.setdefault(key, []).append(i)
+
+        for indices in groups.values():
+            if len(indices) <= 1:
+                continue  # No hay duplicados
+            for idx in indices:
+                r = recs[idx]
+                lat_off, lon_off = HospitalService._hash_offset(r.nombre)
+                r.lat = round(r.lat + lat_off, 6)  # type: ignore[assignment]
+                r.lon = round(r.lon + lon_off, 6)  # type: ignore[assignment]
+                # Recalcular distancia si es posible (no siempre tenemos user_lat)
+        return recs

@@ -1,6 +1,8 @@
 'use client'
 import { HospitalRecommendation } from '@/lib/types'
-import MiniMap from './MiniMap'
+import dynamic from 'next/dynamic'
+
+const MiniMap = dynamic(() => import('./MiniMap'), { ssr: false })
 
 export default function HospitalList({ hospitals }: { hospitals: HospitalRecommendation[] }) {
   if (!hospitals.length) return null
@@ -13,7 +15,7 @@ export default function HospitalList({ hospitals }: { hospitals: HospitalRecomme
       </p>
       <div className="hospitals-grid">
         {hospitals.map((h, i) => {
-          const isBest = h.copago_paciente === minCopago
+          const isBest = i === 0 && h.copago_paciente === minCopago
           return (
             <div key={i} className={`hospital-card ${isBest ? 'best' : ''}`}>
               {isBest && <span className="hospital-badge">✓ Mejor precio</span>}

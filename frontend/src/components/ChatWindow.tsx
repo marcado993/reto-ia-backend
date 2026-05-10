@@ -158,33 +158,51 @@ function RightPanel({ data }: { data: StructuredResponse | null }) {
             </div>
           )}
 
-          {/* Condiciones probables */}
+          {/* Diagnóstico EndlessMedical */}
           {data.condiciones_probables && data.condiciones_probables.length > 0 && (
             <div>
-              <div className="rp-section-lbl"><span>🔬</span> Posibles condiciones</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div className="rp-section-lbl"><span>🧬</span> Diagnóstico inteligente (EndlessMedical)</div>
+              <div style={{
+                background: 'linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%)',
+                border: '1.5px solid #7DD3FC', borderRadius: 12, padding: 12,
+                display: 'flex', flexDirection: 'column', gap: 6,
+              }}>
+                <div style={{ fontSize: 11, color: '#0369A1', fontWeight: 600, marginBottom: 4 }}>
+                  Posibles condiciones basadas en tus síntomas:
+                </div>
                 {data.condiciones_probables.slice(0, 3).map((c, i) => {
                   const pct = Math.round((c.probabilidad || 0) * 100)
+                  const barColor = i === 0 ? '#0EA5E9' : i === 1 ? '#22C55E' : '#A855F7'
                   return (
                     <div key={i} style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '6px 8px', background: '#F8FAFC',
-                      border: '1px solid #E2E8F0', borderRadius: 8,
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 10px', background: '#fff',
+                      border: '1px solid #BAE6FD', borderRadius: 8,
                     }}>
-                      <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: '#0F172A', minWidth: 0 }}>
+                      <div style={{
+                        width: 22, height: 22, borderRadius: '50%',
+                        background: barColor, color: '#fff',
+                        fontSize: 10, fontWeight: 800,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0,
+                      }}>{i + 1}</div>
+                      <div style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: '#0F172A', minWidth: 0 }}>
                         {c.nombre}
                       </div>
                       <div style={{
-                        height: 5, width: 60, background: '#E2E8F0', borderRadius: 99, overflow: 'hidden', flexShrink: 0,
+                        height: 6, width: 70, background: '#E0F2FE', borderRadius: 99, overflow: 'hidden', flexShrink: 0,
                       }}>
-                        <div style={{ height: '100%', width: `${pct}%`, background: '#0EA5E9' }} />
+                        <div style={{ height: '100%', width: `${pct}%`, background: barColor, transition: 'width .6s ease' }} />
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#0369A1', minWidth: 30, textAlign: 'right' }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: '#0369A1', minWidth: 36, textAlign: 'right' }}>
                         {pct}%
                       </div>
                     </div>
                   )
                 })}
+                <div style={{ fontSize: 10, color: '#64748B', marginTop: 4, fontStyle: 'italic' }}>
+                  ⚠️ Este diagnóstico es orientativo. No reemplaza la evaluación médica profesional.
+                </div>
               </div>
             </div>
           )}
@@ -276,9 +294,24 @@ export default function ChatWindow() {
   const [activeNav,    setActiveNav]    = useState('chat')
   const [backendOk,    setBackendOk]    = useState<boolean | null>(null)
   const [networkProviders, setNetworkProviders] = useState<NetworkProvider[]>([])
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null)
 
   const bottomRef   = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Obtener geolocalización del usuario (una sola vez al montar)
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude })
+      },
+      (err) => {
+        console.warn('Geolocalización no disponible:', err.message)
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }
+    )
+  }, [])
 
   useEffect(() => {
     fetchHealthPlans()
@@ -331,7 +364,13 @@ export default function ChatWindow() {
     )
 
     try {
-      const data = await sendMessage({ message: userMsg.content, sessionId, planId })
+      const data = await sendMessage({
+        message: userMsg.content,
+        sessionId,
+        planId,
+        userLat: userLocation?.lat ?? null,
+        userLon: userLocation?.lon ?? null,
+      })
       timers.forEach(clearTimeout)
       setSessionId(data.session_id)
       setAgentSteps(prev => prev.map(s => ({ ...s, status: 'done' as const })))
@@ -353,7 +392,7 @@ export default function ChatWindow() {
       setLoading(false)
       setTimeout(() => setAgentSteps([]), 1800)
     }
-  }, [input, loading, sessionId, planId])
+  }, [input, loading, sessionId, planId, userLocation])
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
@@ -592,7 +631,11 @@ export default function ChatWindow() {
                           {/* Map inline in chat */}
                           {(sd.hospitales_comparacion.some(h => h.lat !== null) || networkProviders.length > 0) && (
                             <div style={{ height: 320, borderRadius: 12, overflow: 'hidden', border: '1px solid #E2E8F0', marginTop: 2, boxShadow: '0 2px 8px rgba(15,23,42,.06)' }}>
-                              <MiniMap hospitals={sd.hospitales_comparacion} networkProviders={networkProviders} />
+                              <MiniMap
+                                hospitals={sd.hospitales_comparacion}
+                                networkProviders={networkProviders}
+                                userLocation={userLocation ?? undefined}
+                              />
                             </div>
                           )}
                         </motion.div>

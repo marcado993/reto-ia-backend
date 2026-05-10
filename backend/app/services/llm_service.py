@@ -12,11 +12,13 @@ import re
 
 from app.agent.prompts import (
     EXTRACTION_PROMPT,
-    FEATURE_MAPPING_PROMPT,
+    PATIENT_ANALYSIS_PROMPT,
     SERVICE_PICK_PROMPT,
     SUMMARY_PROMPT,
+    SYSTEM_PROMPT,
 )
 from app.config import settings
+from app.schemas.chat import CondicionProbable
 from app.schemas.symptom import SymptomExtraction
 
 logger = logging.getLogger(__name__)
@@ -29,30 +31,60 @@ class LLMService:
         self._gemini_client = None
         self.model = ""
         self._available = False
+        self._fallback_models: list[str] = []
 
-        or_key = (settings.OPENROUTER_API_KEY or "").strip()
-        if or_key and not or_key.startswith(("sk-or-your", "changeme")):
+        # ── 1) Groq (primario) ───────────────────────────────────────
+        groq_key = (settings.GROQ_API_KEY or "").strip()
+        if groq_key and not groq_key.startswith(("gsk-your", "changeme")):
             try:
                 from openai import AsyncOpenAI
 
-                ref = (settings.OPENROUTER_HTTP_REFERER or "").strip()
-                headers_fixed: dict[str, str] = {"X-Title": settings.APP_NAME}
-                if ref:
-                    headers_fixed["HTTP-Referer"] = ref
                 self._openai = AsyncOpenAI(
-                    base_url=settings.OPENROUTER_BASE_URL.rstrip("/"),
-                    api_key=or_key,
-                    default_headers=headers_fixed,
-                    timeout=settings.OPENROUTER_TIMEOUT,
+                    base_url=settings.GROQ_BASE_URL.rstrip("/"),
+                    api_key=groq_key,
+                    timeout=settings.GROQ_TIMEOUT,
                     max_retries=1,
                 )
-                self.model = settings.OPENROUTER_MODEL
-                self._backend = "openrouter"
+                self.model = settings.GROQ_MODEL
+                self._backend = "groq"
                 self._available = True
-                logger.info("LLM Service: OpenRouter, modelo %s", self.model)
+                # Parsear modelos fallback
+                fallback = (settings.GROQ_FALLBACK_MODELS or "").strip()
+                if fallback:
+                    self._fallback_models = [m.strip() for m in fallback.split(",") if m.strip()]
+                logger.info(
+                    "LLM Service: Groq, modelo %s, fallbacks=%s",
+                    self.model, self._fallback_models,
+                )
             except Exception as e:
-                logger.warning("No se pudo inicializar OpenRouter: %s", e)
+                logger.warning("No se pudo inicializar Groq: %s", e)
 
+        # ── 2) OpenRouter (fallback) ─────────────────────────────────
+        if not self._available:
+            or_key = (settings.OPENROUTER_API_KEY or "").strip()
+            if or_key and not or_key.startswith(("sk-or-your", "changeme")):
+                try:
+                    from openai import AsyncOpenAI
+
+                    ref = (settings.OPENROUTER_HTTP_REFERER or "").strip()
+                    headers_fixed: dict[str, str] = {"X-Title": settings.APP_NAME}
+                    if ref:
+                        headers_fixed["HTTP-Referer"] = ref
+                    self._openai = AsyncOpenAI(
+                        base_url=settings.OPENROUTER_BASE_URL.rstrip("/"),
+                        api_key=or_key,
+                        default_headers=headers_fixed,
+                        timeout=settings.OPENROUTER_TIMEOUT,
+                        max_retries=1,
+                    )
+                    self.model = settings.OPENROUTER_MODEL
+                    self._backend = "openrouter"
+                    self._available = True
+                    logger.info("LLM Service: OpenRouter, modelo %s", self.model)
+                except Exception as e:
+                    logger.warning("No se pudo inicializar OpenRouter: %s", e)
+
+        # ── 3) Gemini (fallback legado) ──────────────────────────────
         if not self._available:
             gem_ok = bool(
                 settings.GEMINI_API_KEY
@@ -83,19 +115,26 @@ class LLMService:
         return text.strip()
 
     async def _generate_openrouter(
-        self, system: str, user: str, json_mode: bool = False
+        self, system: str, user: str, json_mode: bool = False, model: str | None = None
     ) -> str:
         if not self._openai:
             return ""
         try:
+            if self._backend == "groq":
+                max_tokens = settings.GROQ_MAX_TOKENS
+                temperature = settings.GROQ_TEMPERATURE
+            else:
+                max_tokens = settings.OPENROUTER_MAX_TOKENS
+                temperature = settings.OPENROUTER_TEMPERATURE
+
             kwargs: dict = {
-                "model": self.model,
+                "model": model or self.model,
                 "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                "max_tokens": settings.OPENROUTER_MAX_TOKENS,
-                "temperature": settings.OPENROUTER_TEMPERATURE,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
             }
             if json_mode:
                 kwargs["response_format"] = {"type": "json_object"}
@@ -118,6 +157,36 @@ class LLMService:
         except Exception as e:
             logger.error("OpenRouter falló: %s", e)
             return ""
+
+    async def _generate_with_fallback(
+        self, system: str, user: str, json_mode: bool = False
+    ) -> str:
+        """Genera texto intentando el modelo primario y rotando por fallbacks."""
+        if not self._available:
+            return ""
+
+        # Intentar modelo primario
+        result = await self._generate_openrouter(system, user, json_mode=json_mode)
+        if result:
+            return result
+
+        # Si falló y hay fallbacks, rotar
+        if self._backend in ("groq", "openrouter") and self._fallback_models:
+            for fallback_model in self._fallback_models:
+                logger.warning(
+                    "Modelo primario falló, intentando fallback: %s", fallback_model
+                )
+                try:
+                    result = await self._generate_openrouter(
+                        system, user, json_mode=json_mode, model=fallback_model
+                    )
+                    if result:
+                        logger.info("Fallback exitoso: %s", fallback_model)
+                        return result
+                except Exception as e:
+                    logger.warning("Fallback %s falló: %s", fallback_model, e)
+
+        return ""
 
     async def _generate_gemini(
         self, system: str, user: str, json_mode: bool = False
@@ -157,8 +226,8 @@ class LLMService:
     async def _generate(self, system: str, user: str, json_mode: bool = False) -> str:
         if not self._available:
             return ""
-        if self._backend == "openrouter":
-            return await self._generate_openrouter(system, user, json_mode=json_mode)
+        if self._backend in ("groq", "openrouter"):
+            return await self._generate_with_fallback(system, user, json_mode=json_mode)
         if self._backend == "gemini":
             return await self._generate_gemini(system, user, json_mode=json_mode)
         return ""
@@ -203,44 +272,91 @@ class LLMService:
     ) -> str:
         return await self._generate(system, user, json_mode=json_mode)
 
-    async def map_text_to_features(
+    async def analyze_patient(
         self,
         patient_text: str,
-        valid_features: list[str],
         age: int | None = None,
         gender: str | None = None,
-    ) -> dict[str, str | int | float]:
-        if not self._available:
-            return {}
+    ) -> dict:
+        """Análisis médico completo: síntomas + condiciones + especialidad + urgencia.
 
-        user_payload = (
-            f"features_validos (usa SOLO nombres de esta lista, son {len(valid_features)} en total):\n"
-            f"{', '.join(valid_features)}\n\n"
-            f"age: {age if age is not None else 'desconocida'}\n"
-            f"gender: {gender or 'desconocido'}\n\n"
-            f"patient_text: {patient_text}"
-        )
-        raw = await self._generate(
-            FEATURE_MAPPING_PROMPT, user_payload, json_mode=True
-        )
+        Devuelve un dict con las claves:
+            sintomas: list[SymptomExtraction]
+            condiciones_probables: list[CondicionProbable]
+            especialidad_sugerida: str | None
+            urgencia_sugerida: str
+            justificacion: str
+        """
+        if not self._available:
+            return {
+                "sintomas": [],
+                "condiciones_probables": [],
+                "especialidad_sugerida": None,
+                "urgencia_sugerida": "media",
+                "justificacion": "Servicio LLM no disponible",
+            }
+
+        user_payload = PATIENT_ANALYSIS_PROMPT.replace("{age}", str(age if age is not None else "desconocida")).replace("{gender}", str(gender or "desconocido")).replace("{text}", patient_text)
+        raw = await self._generate(SYSTEM_PROMPT, user_payload, json_mode=True)
         if not raw:
-            return {}
+            logger.warning("LLM analyze_patient devolvió vacío")
+            return {
+                "sintomas": [],
+                "condiciones_probables": [],
+                "especialidad_sugerida": None,
+                "urgencia_sugerida": "media",
+                "justificacion": "No se pudo analizar el texto",
+            }
+
         try:
             parsed = json.loads(self._strip_json_fence(raw))
         except json.JSONDecodeError:
-            logger.warning("LLM devolvió JSON inválido (features): %r", raw[:200])
-            return {}
+            logger.warning("LLM devolvió JSON inválido (analyze): %r", raw[:300])
+            return {
+                "sintomas": [],
+                "condiciones_probables": [],
+                "especialidad_sugerida": None,
+                "urgencia_sugerida": "media",
+                "justificacion": "Error de formato",
+            }
 
-        features = parsed.get("features", parsed)
-        if not isinstance(features, dict):
-            return {}
+        # Parse síntomas
+        sintomas_raw = parsed.get("sintomas", [])
+        sintomas: list[SymptomExtraction] = []
+        for s in sintomas_raw:
+            if isinstance(s, dict) and "normalized" in s:
+                sintomas.append(
+                    SymptomExtraction(
+                        raw_text=patient_text,
+                        normalized=s["normalized"],
+                        severity=s.get("severidad", s.get("severity", "media")),
+                        confidence=float(s.get("confianza", s.get("confidence", 0.8))),
+                    )
+                )
 
-        valid_set = set(valid_features)
-        cleaned: dict[str, str | int | float] = {}
-        for name, value in features.items():
-            if name in valid_set and value is not None:
-                cleaned[name] = value
-        return cleaned
+        # Parse condiciones probables
+        cond_raw = parsed.get("condiciones_probables", [])
+        condiciones: list[CondicionProbable] = []
+        for c in cond_raw:
+            if isinstance(c, dict) and "nombre" in c:
+                condiciones.append(
+                    CondicionProbable(
+                        nombre=c["nombre"],
+                        probabilidad=round(float(c.get("probabilidad", 0.0)), 4),
+                    )
+                )
+
+        return {
+            "sintomas": sintomas,
+            "condiciones_probables": condiciones,
+            "especialidad_sugerida": parsed.get("especialidad_sugerida")
+            or parsed.get("especialidad")
+            or None,
+            "urgencia_sugerida": parsed.get("urgencia_sugerida")
+            or parsed.get("urgencia")
+            or "media",
+            "justificacion": parsed.get("justificacion", ""),
+        }
 
     async def summarize_diagnosis(self, context: dict) -> str:
         if not self._available:
@@ -260,7 +376,7 @@ class LLMService:
             return {}
 
         catalog_str = "\n".join(
-            f"- {s['name']}: {s.get('label', s['name'])} (precio base ${s.get('base_price', 0):.2f})"
+            f"- {s['name']}: {s.get('label', s['name'])}"
             for s in catalog
         )
         valid_names = {s["name"] for s in catalog}

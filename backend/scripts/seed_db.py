@@ -82,7 +82,7 @@ def seed_hospitals(db):
             zone=item.get("zone", ""),
             lat=item.get("lat"),
             lon=item.get("lon"),
-            specialty_costs=item.get("specialty_costs", {}),
+            specialty_costs=item.get("specialty_costs") or {},
         )
         db.add(hospital)
     db.commit()
